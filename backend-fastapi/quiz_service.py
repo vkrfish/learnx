@@ -2,6 +2,16 @@ import json
 import re
 from typing import List, Dict, Any, Optional
 
+try:
+    from langsmith import traceable
+except ImportError:
+    def traceable(*args, **kwargs):
+        def decorator(fn):
+            return fn
+        if len(args) == 1 and callable(args[0]):
+            return args[0]
+        return decorator
+
 QUIZ_SYSTEM_PROMPT = """You are an expert academic quiz generator and rigorous examiner.
 Your task is to generate high-quality multiple-choice questions strictly from the provided source context.
 Do not use outside knowledge.
@@ -16,6 +26,7 @@ def parse_llm_json(raw_text: str) -> Dict[str, Any]:
     clean_text = clean_text.strip()
     return json.loads(clean_text)
 
+@traceable(run_type="chain", name="RAG Quiz Grounding Engine")
 def generate_rag_quiz(
     conn,
     get_embedding_fn,
@@ -237,6 +248,7 @@ Return JSON strictly matching this schema:
 
     return valid_questions
 
+@traceable(run_type="chain", name="RAG Quiz Answer Verification")
 def evaluate_quiz_submission(
     session_questions: List[Dict[str, Any]],
     user_answers: Dict[str, Any]

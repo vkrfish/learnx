@@ -28,9 +28,31 @@ from tutor_service import (
     answer_tutor_followup,
 )
 
+# -------------------------------------------------------------
+# OBSERVABILITY & EVALUATION: LANGSMITH TRACING INTEGRATION
+# -------------------------------------------------------------
+try:
+    from langsmith import traceable
+    LANGSMITH_AVAILABLE = True
+except ImportError:
+    LANGSMITH_AVAILABLE = False
+    def traceable(*args, **kwargs):
+        def decorator(fn):
+            return fn
+        if len(args) == 1 and callable(args[0]):
+            return args[0]
+        return decorator
+
 # Load environment variables
 load_dotenv(dotenv_path="../.env")
 load_dotenv()
+
+# Enable LangChain / LangSmith tracing if API key is provided
+if os.getenv("LANGCHAIN_API_KEY") or os.getenv("LANGSMITH_API_KEY"):
+    os.environ["LANGCHAIN_TRACING_V2"] = "true"
+    if not os.getenv("LANGCHAIN_PROJECT"):
+        os.environ["LANGCHAIN_PROJECT"] = "learnx-rag"
+    print(f"[Observability] LangSmith tracing enabled for project: {os.environ.get('LANGCHAIN_PROJECT')}")
 
 app = FastAPI(title="Ultra Learn FastAPI RAG Service")
 
@@ -138,6 +160,7 @@ print(f"[INFO] OpenRouter API Key present: {bool(OPENROUTER_API_KEY)}")
 # -------------------------------------------------------------
 # CORE AI CLIENT: RESILIENT MULTI-PROVIDER LLM & EMBEDDINGS
 # -------------------------------------------------------------
+@traceable(run_type="embedding", name="Gemini / OpenRouter Vector Embedding")
 def get_embedding(text: str, fast: bool = False) -> list:
     """
     Generates a 1536-dimensional float vector.
@@ -211,6 +234,7 @@ def get_embedding(text: str, fast: bool = False) -> list:
         vec = vec / norm
     return vec.tolist()
 
+@traceable(run_type="llm", name="Gemini 2.5 Flash Generator")
 def call_llm(prompt: str, system_instruction: str = None, json_mode: bool = False, chat_history: list = None, timeout: int = 35, system_prompt: str = None, **kwargs) -> str:
     system_instruction = system_instruction or system_prompt
     """
@@ -1141,7 +1165,37 @@ class ChatPayload(BaseModel):
     context: str = ""
     stream: bool = False
 
+@traceable(run_type="chain", name="RAG Query Condenser")
+def condense_rag_query(question: str, chat_history: list) -> str:
+    history_text = "\n".join([
+        f"{'User' if getattr(m, 'role', '') == 'user' or (isinstance(m, dict) and m.get('role') == 'user') else 'Assistant'}: {getattr(m, 'content', '') if hasattr(m, 'content') else (m.get('content', '') if isinstance(m, dict) else str(m))}"
+        for m in chat_history[-5:]
+    ])
+    condensation_prompt = f"""Given the conversation history and a follow-up question, rewrite the follow-up question to be a single standalone search query containing all key context. Do not answer it.
+Conversation History:
+{history_text}
+Follow-up Question: {question}
+Standalone Search Query:"""
+    condensed = call_llm(condensation_prompt, timeout=10).strip()
+    return re.sub(r'^["\'`]+|["\'`]+$', '', condensed).strip()
+
+@traceable(run_type="retriever", name="pgvector Cosine Retrieval")
+def retrieve_pgvector_chunks(cur, query_embedding: list, item_ids: list, limit: int = 8):
+    cur.execute(
+        """
+        SELECT c.chunk_text, c.page_number, s.title, s.file_name, c.item_id, (c.embedding <=> %s::vector) AS distance
+        FROM public.document_chunks c
+        JOIN public.study_items s ON c.item_id = s.id
+        WHERE c.item_id = ANY(%s::uuid[])
+        ORDER BY c.embedding <=> %s::vector ASC
+        LIMIT %s
+        """,
+        (query_embedding, item_ids, query_embedding, limit)
+    )
+    return cur.fetchall()
+
 @app.post("/chat")
+@traceable(run_type="chain", name="LearnX Grounded Chat")
 async def chat(payload: ChatPayload):
     validate_uuid_string(payload.item_id)
     conn = get_db_connection()
@@ -1152,18 +1206,7 @@ async def chat(payload: ChatPayload):
         # 1. Condense query if chat history exists
         if payload.chat_history:
             try:
-                history_text = "\n".join([
-                    f"{'User' if m.role == 'user' else 'Assistant'}: {m.content}"
-                    for m in payload.chat_history[-5:]
-                ])
-                condensation_prompt = f"""Given the conversation history and a follow-up question, rewrite the follow-up question to be a single standalone search query containing all key context. Do not answer it.
-Conversation History:
-{history_text}
-Follow-up Question: {payload.question}
-Standalone Search Query:"""
-
-                condensed = call_llm(condensation_prompt, timeout=10).strip()
-                condensed = re.sub(r'^["\'`]+|["\'`]+$', '', condensed).strip()
+                condensed = condense_rag_query(payload.question, payload.chat_history)
                 if condensed and len(condensed) > 3:
                     search_query = condensed
                 print(f"[RAG] Question: '{payload.question}' -> Query: '{search_query}'")
@@ -1208,20 +1251,7 @@ Standalone Search Query:"""
             # Priority 2: Vector RAG search with Cosine Distance
             if not matches:
                 query_embedding = get_embedding(search_query, fast=False)
-                cur.execute(
-                    """
-                    SELECT c.chunk_text, c.page_number, s.title, s.file_name, c.item_id, (c.embedding <=> %s::vector) AS distance
-                    FROM public.document_chunks c
-                    JOIN public.study_items s ON c.item_id = s.id
-                    WHERE c.item_id = ANY(%s::uuid[])
-                    ORDER BY c.embedding <=> %s::vector ASC
-                    LIMIT 8
-                    """,
-                    (query_embedding, item_ids, query_embedding)
-                )
-                raw_matches = cur.fetchall()
-                # Accept top nearest chunks
-                matches = raw_matches[:8]
+                matches = retrieve_pgvector_chunks(cur, query_embedding, item_ids, limit=8)
 
             if matches:
                 matched_ids = {str(m[4]) for m in matches}
@@ -1472,6 +1502,7 @@ async def get_tts_full(item_id: str, voice1: str, voice2: str, h1Name: str = "Ho
     })
 
 @app.post("/generate-podcast")
+@traceable(run_type="chain", name="LearnX AI Audio Podcast Synthesis")
 async def generate_podcast(payload: GenerationPayload):
     validate_uuid_string(payload.item_id)
     conn = get_db_connection()
@@ -1587,6 +1618,7 @@ Context:
             conn.close()
 
 @app.post("/generate-briefing")
+@traceable(run_type="chain", name="LearnX Executive Briefing Synthesis")
 async def generate_briefing(payload: GenerationPayload):
     validate_uuid_string(payload.item_id)
     conn = get_db_connection()
@@ -1674,6 +1706,7 @@ class QuizEvaluatePayload(BaseModel):
     profile_id: Optional[str] = None
 
 @app.post("/generate-quiz")
+@traceable(run_type="chain", name="LearnX Grounded Quiz Synthesis")
 async def generate_quiz_endpoint(payload: QuizGeneratePayload):
     validate_uuid_string(payload.item_id)
     conn = get_db_connection()
