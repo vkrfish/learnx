@@ -1463,7 +1463,7 @@ function StudySessionPanel({
   }, [session]);
 
   const [activeTab, setActiveTab] = useState<
-    "studio" | "notes" | "briefing" | "podcast" | "flashcards" | "quiz" | "slides" | "mindmap" | "table"
+    "studio" | "notes" | "briefing" | "podcast" | "flashcards" | "quiz"
   >("studio");
 
   // Panel sizing & collapse states for flexible adjustable workspace
@@ -1472,8 +1472,6 @@ function StudySessionPanel({
   const [fileViewerExpanded, setFileViewerExpanded] = useState(false);
   const [workspaceExpanded, setWorkspaceExpanded] = useState(false);
   const [studioExpanded, setStudioExpanded] = useState(false);
-  const [studioDismissPromo, setStudioDismissPromo] = useState(false);
-  const [activeSlideIdx, setActiveSlideIdx] = useState(0);
 
   // -------------------------------------------------------------
   // TUTOR MODE WORKFLOW STATES
@@ -3525,13 +3523,13 @@ function StudySessionPanel({
                       : activeTab === "podcast"
                       ? "Audio Overview"
                       : activeTab === "briefing"
-                      ? "Reports"
-                      : activeTab === "slides"
-                      ? "Slide Deck"
-                      : activeTab === "mindmap"
-                      ? "Mind Map"
-                      : activeTab === "table"
-                      ? "Data Table"
+                      ? "Briefing Document"
+                      : activeTab === "flashcards"
+                      ? "Flashcards"
+                      : activeTab === "quiz"
+                      ? "Practice Quiz"
+                      : activeTab === "notes"
+                      ? "Study Notes"
                       : activeTab}
                   </span>
                 </button>
@@ -4187,248 +4185,174 @@ function StudySessionPanel({
             {/* ========================================================= */}
             {studyMode === "notebook" && (
               <>
-            {/* A. NOTEBOOKLM STUDIO HUB */}
+            {/* A. LEARNX STUDIO HUB (EXCLUSIVELY APP FEATURES) */}
             {activeTab === "studio" && (
               <div className="flex flex-col space-y-4 pb-6">
-                {/* Audio Overview language prompt */}
-                <p className="text-[11px] text-muted-foreground leading-relaxed">
-                  Create an Audio Overview in:{" "}
-                  <span className="text-foreground/80 font-medium">
-                    हिन्दी, বাংলা, ગુજરાતી, ಕನ್ನಡ, മലയാളം, मराठी, ਪੰਜਾਬੀ, தமிழ், తెలుగు
+                {/* Header Subtitle */}
+                <div className="flex items-center justify-between text-[11px] text-muted-foreground border-b border-border/50 pb-2">
+                  <span>AI Synthesis & Study Tools</span>
+                  <span className="font-mono text-primary font-medium">
+                    {selectedSourceIds.length > 0 ? selectedSourceIds.length : sources.length} source{sources.length !== 1 ? "s" : ""} active
                   </span>
-                </p>
+                </div>
 
-                {/* Dismissible Promo Banner */}
-                {!studioDismissPromo && (
-                  <div className="relative flex items-center justify-between rounded-xl bg-gradient-to-r from-primary/10 via-accent/15 to-secondary border border-border/80 px-3.5 py-2.5">
-                    <div className="flex items-center gap-2 pr-2 min-w-0">
-                      <Sparkles className="h-4 w-4 text-primary shrink-0" />
-                      <p className="text-xs text-foreground font-medium truncate">
-                        You can now create Slides and Videos step-by-step
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => setActiveTab("slides")}
-                        className="rounded-full bg-foreground text-background dark:bg-primary dark:text-primary-foreground px-3 py-1 text-[11px] font-semibold hover:opacity-90 transition-opacity"
-                      >
-                        Try it
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setStudioDismissPromo(true)}
-                        className="p-1 text-muted-foreground hover:text-foreground transition-colors rounded"
-                        title="Dismiss"
-                      >
-                        <X className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {/* 2-Column Grid of Studio Features */}
+                {/* 2-Column Grid of Authentic App Features */}
                 <div className="grid grid-cols-2 gap-2.5">
-                  {/* 1. Audio Overview */}
+                  {/* 1. Audio Overview (Podcast Generator) */}
                   <button
                     type="button"
                     onClick={() => {
                       setActiveTab("podcast");
                       setShowRightWelcome(false);
                     }}
-                    className="flex items-center gap-2.5 rounded-xl border border-border/70 bg-card/60 p-3 text-left hover:border-blue-500/50 hover:bg-secondary/40 transition-all group"
+                    className="flex flex-col items-start gap-2.5 rounded-xl border border-border/70 bg-card/60 p-3.5 text-left hover:border-blue-500/50 hover:bg-secondary/40 transition-all group"
                   >
-                    <div className="grid h-8 w-8 place-items-center rounded-lg bg-blue-500/10 text-blue-500 dark:bg-blue-400/15 dark:text-blue-400 shrink-0 group-hover:scale-105 transition-transform">
+                    <div className="grid h-9 w-9 place-items-center rounded-lg bg-blue-500/10 text-blue-500 dark:bg-blue-400/15 dark:text-blue-400 group-hover:scale-105 transition-transform shadow-xs">
                       <Headphones className="h-4 w-4" />
                     </div>
-                    <div className="min-w-0 flex-1">
+                    <div className="min-w-0 w-full">
                       <span className="text-xs font-semibold text-foreground block truncate group-hover:text-primary transition-colors">
                         Audio Overview
                       </span>
-                    </div>
-                  </button>
-
-                  {/* 2. Slide Deck */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setActiveTab("slides");
-                      setShowRightWelcome(false);
-                    }}
-                    className="flex items-center gap-2.5 rounded-xl border border-border/70 bg-card/60 p-3 text-left hover:border-pink-500/50 hover:bg-secondary/40 transition-all group"
-                  >
-                    <div className="grid h-8 w-8 place-items-center rounded-lg bg-pink-500/10 text-pink-500 dark:bg-pink-400/15 dark:text-pink-400 shrink-0 group-hover:scale-105 transition-transform">
-                      <Presentation className="h-4 w-4" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <span className="text-xs font-semibold text-foreground block truncate group-hover:text-pink-500 transition-colors">
-                        Slide Deck
+                      <span className="text-[10px] text-muted-foreground block truncate mt-0.5">
+                        Dual-voice conversational podcast
                       </span>
                     </div>
                   </button>
 
-                  {/* 3. Video Overview */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setActiveTab("slides");
-                      setShowRightWelcome(false);
-                      toast.info("Generated video slide walkthrough from your active sources!");
-                    }}
-                    className="flex items-center gap-2.5 rounded-xl border border-border/70 bg-card/60 p-3 text-left hover:border-emerald-500/50 hover:bg-secondary/40 transition-all group"
-                  >
-                    <div className="grid h-8 w-8 place-items-center rounded-lg bg-emerald-500/10 text-emerald-500 dark:bg-emerald-400/15 dark:text-emerald-400 shrink-0 group-hover:scale-105 transition-transform">
-                      <Video className="h-4 w-4" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <span className="text-xs font-semibold text-foreground block truncate group-hover:text-emerald-500 transition-colors">
-                        Video Overview
-                      </span>
-                    </div>
-                  </button>
-
-                  {/* 4. Mind Map */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setActiveTab("mindmap");
-                      setShowRightWelcome(false);
-                    }}
-                    className="flex items-center gap-2.5 rounded-xl border border-border/70 bg-card/60 p-3 text-left hover:border-purple-500/50 hover:bg-secondary/40 transition-all group"
-                  >
-                    <div className="grid h-8 w-8 place-items-center rounded-lg bg-purple-500/10 text-purple-500 dark:bg-purple-400/15 dark:text-purple-400 shrink-0 group-hover:scale-105 transition-transform">
-                      <Network className="h-4 w-4" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <span className="text-xs font-semibold text-foreground block truncate group-hover:text-purple-500 transition-colors">
-                        Mind Map
-                      </span>
-                    </div>
-                  </button>
-
-                  {/* 5. Reports (New!) */}
+                  {/* 2. Briefing Doc (Executive Synthesis) */}
                   <button
                     type="button"
                     onClick={() => {
                       setActiveTab("briefing");
                       setShowRightWelcome(false);
                     }}
-                    className="flex items-center gap-2.5 rounded-xl border border-border/70 bg-card/60 p-3 text-left hover:border-rose-500/50 hover:bg-secondary/40 transition-all group"
+                    className="flex flex-col items-start gap-2.5 rounded-xl border border-border/70 bg-card/60 p-3.5 text-left hover:border-rose-500/50 hover:bg-secondary/40 transition-all group"
                   >
-                    <div className="grid h-8 w-8 place-items-center rounded-lg bg-rose-500/10 text-rose-500 dark:bg-rose-400/15 dark:text-rose-400 shrink-0 group-hover:scale-105 transition-transform">
+                    <div className="grid h-9 w-9 place-items-center rounded-lg bg-rose-500/10 text-rose-500 dark:bg-rose-400/15 dark:text-rose-400 group-hover:scale-105 transition-transform shadow-xs">
                       <FileStack className="h-4 w-4" />
                     </div>
-                    <div className="min-w-0 flex-1 flex items-center justify-between">
+                    <div className="min-w-0 w-full">
                       <span className="text-xs font-semibold text-foreground block truncate group-hover:text-rose-500 transition-colors">
-                        Reports
+                        Briefing Doc
                       </span>
-                      <span className="text-[9px] font-bold font-mono uppercase bg-rose-500/15 text-rose-500 dark:text-rose-400 px-1.5 py-0.5 rounded-full">
-                        New!
+                      <span className="text-[10px] text-muted-foreground block truncate mt-0.5">
+                        Comprehensive grounded synthesis
                       </span>
                     </div>
                   </button>
 
-                  {/* 6. Flashcards */}
+                  {/* 3. Flashcards */}
                   <button
                     type="button"
                     onClick={() => {
                       setActiveTab("flashcards");
                       setShowRightWelcome(false);
                     }}
-                    className="flex items-center gap-2.5 rounded-xl border border-border/70 bg-card/60 p-3 text-left hover:border-amber-500/50 hover:bg-secondary/40 transition-all group"
+                    className="flex flex-col items-start gap-2.5 rounded-xl border border-border/70 bg-card/60 p-3.5 text-left hover:border-amber-500/50 hover:bg-secondary/40 transition-all group"
                   >
-                    <div className="grid h-8 w-8 place-items-center rounded-lg bg-amber-500/10 text-amber-500 dark:bg-amber-400/15 dark:text-amber-400 shrink-0 group-hover:scale-105 transition-transform">
+                    <div className="grid h-9 w-9 place-items-center rounded-lg bg-amber-500/10 text-amber-500 dark:bg-amber-400/15 dark:text-amber-400 group-hover:scale-105 transition-transform shadow-xs">
                       <Sparkles className="h-4 w-4" />
                     </div>
-                    <div className="min-w-0 flex-1">
+                    <div className="min-w-0 w-full">
                       <span className="text-xs font-semibold text-foreground block truncate group-hover:text-amber-500 transition-colors">
                         Flashcards
+                      </span>
+                      <span className="text-[10px] text-muted-foreground block truncate mt-0.5">
+                        Spaced repetition practice deck
                       </span>
                     </div>
                   </button>
 
-                  {/* 7. Quiz */}
+                  {/* 4. Practice Quiz */}
                   <button
                     type="button"
                     onClick={() => {
                       setActiveTab("quiz");
                       setShowRightWelcome(false);
                     }}
-                    className="flex items-center gap-2.5 rounded-xl border border-border/70 bg-card/60 p-3 text-left hover:border-sky-500/50 hover:bg-secondary/40 transition-all group"
+                    className="flex flex-col items-start gap-2.5 rounded-xl border border-border/70 bg-card/60 p-3.5 text-left hover:border-sky-500/50 hover:bg-secondary/40 transition-all group"
                   >
-                    <div className="grid h-8 w-8 place-items-center rounded-lg bg-sky-500/10 text-sky-500 dark:bg-sky-400/15 dark:text-sky-400 shrink-0 group-hover:scale-105 transition-transform">
+                    <div className="grid h-9 w-9 place-items-center rounded-lg bg-sky-500/10 text-sky-500 dark:bg-sky-400/15 dark:text-sky-400 group-hover:scale-105 transition-transform shadow-xs">
                       <HelpCircle className="h-4 w-4" />
                     </div>
-                    <div className="min-w-0 flex-1">
+                    <div className="min-w-0 w-full">
                       <span className="text-xs font-semibold text-foreground block truncate group-hover:text-sky-500 transition-colors">
-                        Quiz
+                        Practice Quiz
+                      </span>
+                      <span className="text-[10px] text-muted-foreground block truncate mt-0.5">
+                        Multiple-choice active recall tests
                       </span>
                     </div>
                   </button>
 
-                  {/* 8. Data Table */}
+                  {/* 5. Study Notes */}
                   <button
                     type="button"
                     onClick={() => {
-                      setActiveTab("table");
+                      setActiveTab("notes");
                       setShowRightWelcome(false);
                     }}
-                    className="flex items-center gap-2.5 rounded-xl border border-border/70 bg-card/60 p-3 text-left hover:border-cyan-500/50 hover:bg-secondary/40 transition-all group"
+                    className="flex flex-col items-start gap-2.5 rounded-xl border border-border/70 bg-card/60 p-3.5 text-left hover:border-emerald-500/50 hover:bg-secondary/40 transition-all group"
                   >
-                    <div className="grid h-8 w-8 place-items-center rounded-lg bg-cyan-500/10 text-cyan-500 dark:bg-cyan-400/15 dark:text-cyan-400 shrink-0 group-hover:scale-105 transition-transform">
-                      <Table2 className="h-4 w-4" />
+                    <div className="grid h-9 w-9 place-items-center rounded-lg bg-emerald-500/10 text-emerald-500 dark:bg-emerald-400/15 dark:text-emerald-400 group-hover:scale-105 transition-transform shadow-xs">
+                      <Edit2 className="h-4 w-4" />
                     </div>
-                    <div className="min-w-0 flex-1">
-                      <span className="text-xs font-semibold text-foreground block truncate group-hover:text-cyan-500 transition-colors">
-                        Data Table
+                    <div className="min-w-0 w-full">
+                      <span className="text-xs font-semibold text-foreground block truncate group-hover:text-emerald-500 transition-colors">
+                        Study Notes
+                      </span>
+                      <span className="text-[10px] text-muted-foreground block truncate mt-0.5">
+                        Markdown notes & export
+                      </span>
+                    </div>
+                  </button>
+
+                  {/* 6. Socratic Tutor Mode */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStudyMode("tutor");
+                      if (tutorOutline.length === 0) {
+                        handleLoadTutorOutline();
+                      }
+                    }}
+                    className="flex flex-col items-start gap-2.5 rounded-xl border border-primary/40 bg-primary/5 hover:bg-primary/10 p-3.5 text-left transition-all group"
+                  >
+                    <div className="grid h-9 w-9 place-items-center rounded-lg bg-primary text-primary-foreground group-hover:scale-105 transition-transform shadow-xs">
+                      <GraduationCap className="h-4 w-4" />
+                    </div>
+                    <div className="min-w-0 w-full">
+                      <span className="text-xs font-semibold text-foreground block truncate group-hover:text-primary transition-colors">
+                        Tutor Mode
+                      </span>
+                      <span className="text-[10px] text-muted-foreground block truncate mt-0.5">
+                        Interactive sequential mastery
                       </span>
                     </div>
                   </button>
                 </div>
 
-                {/* Tutor Mode Full Tile */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setStudyMode("tutor");
-                    if (tutorOutline.length === 0) {
-                      handleLoadTutorOutline();
-                    }
-                  }}
-                  className="w-full flex items-center justify-between rounded-xl border border-primary/30 bg-primary/5 hover:bg-primary/10 p-3 text-left transition-all group"
-                >
-                  <div className="flex items-center gap-2.5">
-                    <div className="grid h-8 w-8 place-items-center rounded-lg bg-primary text-primary-foreground shrink-0 shadow-xs">
-                      <GraduationCap className="h-4 w-4" />
-                    </div>
-                    <div>
-                      <span className="text-xs font-semibold text-foreground block group-hover:text-primary transition-colors">
-                        Socratic Tutor Mode
-                      </span>
-                      <span className="text-[10px] text-muted-foreground block">
-                        Sequential chapters, active recall activities & evaluation
-                      </span>
-                    </div>
-                  </div>
-                  <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" />
-                </button>
-
-                {/* Writing Assistant & Notes List */}
+                {/* Recent Artifacts & Notes Section */}
                 <div className="space-y-2 pt-2">
+                  <span className="text-[10px] uppercase font-mono tracking-wider text-muted-foreground block">
+                    Saved Artifacts & Notes
+                  </span>
+
                   <div
                     onClick={() => setActiveTab("notes")}
                     className="flex items-center justify-between rounded-xl border border-border/70 bg-card/40 hover:bg-secondary/50 p-3 cursor-pointer transition-colors"
                   >
                     <div className="flex items-center gap-2.5 min-w-0">
-                      <div className="grid h-7 w-7 place-items-center rounded-lg bg-amber-500/15 text-amber-500 shrink-0">
+                      <div className="grid h-7 w-7 place-items-center rounded-lg bg-emerald-500/15 text-emerald-500 shrink-0">
                         <Edit2 className="h-3.5 w-3.5" />
                       </div>
                       <div className="min-w-0">
                         <h4 className="text-xs font-semibold text-foreground truncate">
-                          Writing Assistant
+                          Study Notes & Writing Assistant
                         </h4>
                         <p className="text-[10px] text-muted-foreground font-mono mt-0.5">
-                          {selectedSourceIds.length > 0 ? selectedSourceIds.length : sources.length} sources • {notebook.notes ? "Edited" : "1m ago"}
+                          {selectedSourceIds.length > 0 ? selectedSourceIds.length : sources.length} sources • {notebook.notes ? "Saved" : "Ready to write"}
                         </p>
                       </div>
                     </div>
@@ -4450,7 +4374,7 @@ function StudySessionPanel({
                       className="flex items-center justify-between rounded-xl border border-border/70 bg-card/40 hover:bg-secondary/50 p-3 cursor-pointer transition-colors"
                     >
                       <div className="flex items-center gap-2.5 min-w-0">
-                        <div className="grid h-7 w-7 place-items-center rounded-lg bg-primary/15 text-primary shrink-0">
+                        <div className="grid h-7 w-7 place-items-center rounded-lg bg-rose-500/15 text-rose-500 shrink-0">
                           <FileStack className="h-3.5 w-3.5" />
                         </div>
                         <div className="min-w-0">
@@ -4488,251 +4412,6 @@ function StudySessionPanel({
                     <Plus className="h-3.5 w-3.5" />
                     <span>Add note</span>
                   </button>
-                </div>
-              </div>
-            )}
-
-            {/* SLIDE DECK VIEW */}
-            {activeTab === "slides" && (
-              <div className="flex flex-col h-full space-y-4 text-left">
-                <div className="flex items-center justify-between border-b border-border/60 pb-2.5">
-                  <div>
-                    <span className="text-[10px] text-muted-foreground uppercase font-mono tracking-wider block">
-                      Presentation Studio
-                    </span>
-                    <h3 className="text-sm font-semibold text-foreground">
-                      {previewSource?.title || notebook.title}
-                    </h3>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        toast.success("Presentation exported as Markdown slides!");
-                      }}
-                      className="text-xs font-medium text-primary flex items-center gap-1 hover:text-primary/80 transition-colors border border-border/60 rounded-md px-2.5 py-1 bg-secondary/30"
-                    >
-                      <Download className="h-3 w-3" /> Export
-                    </button>
-                  </div>
-                </div>
-
-                {/* Slide Card Preview */}
-                <div className="rounded-2xl border border-border/70 bg-gradient-to-br from-card via-card to-secondary/30 p-5 shadow-xs flex flex-col justify-between min-h-[320px]">
-                  <div>
-                    <div className="flex items-center justify-between text-[11px] text-muted-foreground font-mono mb-3">
-                      <span className="text-primary font-semibold">Slide {activeSlideIdx + 1} of 3</span>
-                      <span>LearnX Presentation</span>
-                    </div>
-
-                    <h2 className="text-base font-bold text-foreground tracking-tight mb-1">
-                      {activeSlideIdx === 0
-                        ? previewSource?.title || notebook.title
-                        : activeSlideIdx === 1
-                        ? "Pipeline Architecture & Modeling"
-                        : "Key Insights & Conclusion"}
-                    </h2>
-                    <p className="text-xs text-muted-foreground mb-4">
-                      {activeSlideIdx === 0
-                        ? "High-level architectural synthesis & core findings"
-                        : activeSlideIdx === 1
-                        ? "Data ingestion, LOF outlier rejection, and SHAP decision matrix"
-                        : "Empirical outcomes and practical pedagogical applications"}
-                    </p>
-
-                    <div className="space-y-2 mb-4">
-                      {(activeSlideIdx === 0
-                        ? [
-                            "LOF-based preprocessing standardizes multidimensional feature sets",
-                            "SHAP quantifies soft skills impact (Priority, Planning, Time)",
-                            "DEMATEL/COBRA ranks instructional strategies based on causal profiles",
-                            "Delivers adaptive nudges and degree orientation",
-                          ]
-                        : activeSlideIdx === 1
-                        ? [
-                            "Input Layer: PDF, transcripts, lecture recordings, web sources",
-                            "Feature extraction computes SHAP values for each student factor",
-                            "Logistic Regression model predicts program classification",
-                            "Dynamic feedback loop feeds real-time evaluation scores",
-                          ]
-                        : [
-                            "Statistically significant lift in student retention and mastery",
-                            "Adaptive scaffolding adjusts pace based on active recall quiz results",
-                            "Zero hallucination risk via strict chunk attribution",
-                          ]
-                      ).map((bullet, bidx) => (
-                        <div key={bidx} className="flex items-start gap-2 text-xs text-foreground/90 leading-relaxed">
-                          <span className="h-1.5 w-1.5 rounded-full bg-primary mt-1.5 shrink-0" />
-                          <span>{bullet}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="pt-3 border-t border-border/50 flex items-center justify-between text-[11px] text-muted-foreground">
-                    <span className="italic">Grounded in {selectedSourceIds.length || sources.length} active sources</span>
-                    <span className="font-mono text-[10px]">LearnX Studio</span>
-                  </div>
-                </div>
-
-                {/* Slide Navigation Bar */}
-                <div className="flex items-center justify-between pt-1">
-                  <button
-                    type="button"
-                    onClick={() => setActiveSlideIdx((prev) => Math.max(0, prev - 1))}
-                    disabled={activeSlideIdx === 0}
-                    className="flex items-center gap-1 text-xs font-medium px-3 py-1.5 rounded-lg border border-border/70 bg-card hover:bg-secondary disabled:opacity-40 transition-colors"
-                  >
-                    <ChevronLeft className="h-3.5 w-3.5" /> Previous
-                  </button>
-
-                  <div className="flex items-center gap-1.5">
-                    {[0, 1, 2].map((idx) => (
-                      <button
-                        key={idx}
-                        type="button"
-                        onClick={() => setActiveSlideIdx(idx)}
-                        className={`h-2 rounded-full transition-all ${
-                          activeSlideIdx === idx ? "w-6 bg-primary" : "w-2 bg-muted-foreground/30 hover:bg-muted-foreground/60"
-                        }`}
-                      />
-                    ))}
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => setActiveSlideIdx((prev) => Math.min(2, prev + 1))}
-                    disabled={activeSlideIdx === 2}
-                    className="flex items-center gap-1 text-xs font-medium px-3 py-1.5 rounded-lg border border-border/70 bg-card hover:bg-secondary disabled:opacity-40 transition-colors"
-                  >
-                    Next <ChevronRight className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* MIND MAP VIEW */}
-            {activeTab === "mindmap" && (
-              <div className="flex flex-col h-full space-y-4 text-left">
-                <div className="flex items-center justify-between border-b border-border/60 pb-2.5">
-                  <div>
-                    <span className="text-[10px] text-muted-foreground uppercase font-mono tracking-wider block">
-                      Concept Hierarchy
-                    </span>
-                    <h3 className="text-sm font-semibold text-foreground">Interactive Mind Map</h3>
-                  </div>
-                  <span className="text-[10px] font-mono text-purple-500 bg-purple-500/10 border border-purple-500/20 px-2 py-0.5 rounded">
-                    4 Branches
-                  </span>
-                </div>
-
-                <div className="rounded-xl border border-border/70 bg-card/60 p-4 space-y-3">
-                  {/* Central Node */}
-                  <div className="p-3 rounded-lg bg-primary/10 border border-primary/30 text-center">
-                    <span className="text-xs font-bold text-primary block">
-                      {previewSource?.title || notebook.title}
-                    </span>
-                    <span className="text-[10px] text-muted-foreground">Core Research Focus</span>
-                  </div>
-
-                  {/* Branches */}
-                  <div className="grid grid-cols-1 gap-2.5 pl-2 border-l-2 border-dashed border-primary/30">
-                    <div className="rounded-lg border border-border/60 bg-background/80 p-2.5">
-                      <span className="text-xs font-semibold text-foreground block">
-                        1. Data Preprocessing & Cleaning
-                      </span>
-                      <p className="text-[11px] text-muted-foreground mt-0.5">
-                        Local Outlier Factor (LOF) filters irregular samples and standardizes multidimensional scales.
-                      </p>
-                    </div>
-
-                    <div className="rounded-lg border border-border/60 bg-background/80 p-2.5">
-                      <span className="text-xs font-semibold text-foreground block">
-                        2. Feature Extraction (SHAP)
-                      </span>
-                      <p className="text-[11px] text-muted-foreground mt-0.5">
-                        Quantifies individual feature contributions (Priority, Time Allocation, Planning) to academic performance.
-                      </p>
-                    </div>
-
-                    <div className="rounded-lg border border-border/60 bg-background/80 p-2.5">
-                      <span className="text-xs font-semibold text-foreground block">
-                        3. Hybrid Modeling & Classification
-                      </span>
-                      <p className="text-[11px] text-muted-foreground mt-0.5">
-                        Logistic Regression paired with DEMATEL & COBRA for strategic multi-criteria decision making.
-                      </p>
-                    </div>
-
-                    <div className="rounded-lg border border-border/60 bg-background/80 p-2.5">
-                      <span className="text-xs font-semibold text-foreground block">
-                        4. Pedagogical Nudges & Interventions
-                      </span>
-                      <p className="text-[11px] text-muted-foreground mt-0.5">
-                        Delivers ranked pedagogical recommendations directly to instructors and learners.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* DATA TABLE VIEW */}
-            {activeTab === "table" && (
-              <div className="flex flex-col h-full space-y-3 text-left">
-                <div className="flex items-center justify-between border-b border-border/60 pb-2.5">
-                  <div>
-                    <span className="text-[10px] text-muted-foreground uppercase font-mono tracking-wider block">
-                      Structured Extraction
-                    </span>
-                    <h3 className="text-sm font-semibold text-foreground">Grounded Data Table</h3>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => toast.success("Table exported as CSV!")}
-                    className="text-xs font-medium text-primary flex items-center gap-1 hover:text-primary/80 transition-colors border border-border/60 rounded-md px-2.5 py-1 bg-secondary/30"
-                  >
-                    <Download className="h-3 w-3" /> CSV
-                  </button>
-                </div>
-
-                <div className="overflow-x-auto rounded-xl border border-border/70 bg-card/60">
-                  <table className="w-full text-left text-xs">
-                    <thead className="bg-muted/40 text-muted-foreground border-b border-border/60 font-mono text-[10px] uppercase">
-                      <tr>
-                        <th className="py-2.5 px-3">Variable / Metric</th>
-                        <th className="py-2.5 px-3">Module</th>
-                        <th className="py-2.5 px-3">Impact / Value</th>
-                        <th className="py-2.5 px-3">Grounding</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border/50 text-foreground/90">
-                      <tr>
-                        <td className="py-2.5 px-3 font-medium">Outlier Removal</td>
-                        <td className="py-2.5 px-3 font-mono text-[11px] text-muted-foreground">LOF</td>
-                        <td className="py-2.5 px-3">Normalizes distributions</td>
-                        <td className="py-2.5 px-3 text-primary text-[11px]">Chunk 6-7</td>
-                      </tr>
-                      <tr>
-                        <td className="py-2.5 px-3 font-medium">Feature Priority</td>
-                        <td className="py-2.5 px-3 font-mono text-[11px] text-muted-foreground">SHAP</td>
-                        <td className="py-2.5 px-3">Time & Planning ranking</td>
-                        <td className="py-2.5 px-3 text-primary text-[11px]">Chunk 14-15</td>
-                      </tr>
-                      <tr>
-                        <td className="py-2.5 px-3 font-medium">Program Selection</td>
-                        <td className="py-2.5 px-3 font-mono text-[11px] text-muted-foreground">Logit</td>
-                        <td className="py-2.5 px-3">Optimal degree match</td>
-                        <td className="py-2.5 px-3 text-primary text-[11px]">Chunk 45</td>
-                      </tr>
-                      <tr>
-                        <td className="py-2.5 px-3 font-medium">Decision Weighting</td>
-                        <td className="py-2.5 px-3 font-mono text-[11px] text-muted-foreground">COBRA</td>
-                        <td className="py-2.5 px-3">Ranked causal impact</td>
-                        <td className="py-2.5 px-3 text-primary text-[11px]">Chunk 17</td>
-                      </tr>
-                    </tbody>
-                  </table>
                 </div>
               </div>
             )}
