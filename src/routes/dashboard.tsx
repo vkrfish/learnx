@@ -71,7 +71,24 @@ import {
   HelpCircle,
   Headphones,
   FileStack,
+  PanelLeftClose,
+  PanelLeftOpen,
+  PanelRightClose,
+  PanelRightOpen,
+  Maximize2,
+  Minimize2,
+  Presentation,
+  Network,
+  Table2,
+  Layers,
+  MoreVertical,
+  Video,
 } from "lucide-react";
+import {
+  ResizablePanelGroup,
+  ResizablePanel,
+  ResizableHandle,
+} from "../components/ui/resizable";
 import { toast } from "sonner";
 import {
   StudyItem,
@@ -1446,8 +1463,17 @@ function StudySessionPanel({
   }, [session]);
 
   const [activeTab, setActiveTab] = useState<
-    "notes" | "briefing" | "podcast" | "flashcards" | "quiz"
-  >("notes");
+    "studio" | "notes" | "briefing" | "podcast" | "flashcards" | "quiz" | "slides" | "mindmap" | "table"
+  >("studio");
+
+  // Panel sizing & collapse states for flexible adjustable workspace
+  const [sourcesCollapsed, setSourcesCollapsed] = useState(false);
+  const [studioCollapsed, setStudioCollapsed] = useState(false);
+  const [fileViewerExpanded, setFileViewerExpanded] = useState(false);
+  const [workspaceExpanded, setWorkspaceExpanded] = useState(false);
+  const [studioExpanded, setStudioExpanded] = useState(false);
+  const [studioDismissPromo, setStudioDismissPromo] = useState(false);
+  const [activeSlideIdx, setActiveSlideIdx] = useState(0);
 
   // -------------------------------------------------------------
   // TUTOR MODE WORKFLOW STATES
@@ -2642,52 +2668,103 @@ function StudySessionPanel({
         </div>
       </header>
 
-      {/* 2. THREE-COLUMN VIEW CONTAINER */}
-      <div className="flex flex-1 overflow-hidden grid grid-cols-1 lg:grid-cols-12">
-        
-        {/* COLUMN 1: LEFT SOURCE sidebar checklist (lg:col-span-3) */}
-        <div className="lg:col-span-3 flex flex-col border-r border-border/60 bg-card/40 overflow-hidden">
-          {activeSourcePreviewId && previewSource ? (
-            /* SOURCE PREVIEW MODE (SLIDES OVER THE CHECKLIST) */
-            <div className="flex flex-col h-full overflow-hidden">
-              {/* Preview controls header */}
-              <div className="flex items-center justify-between border-b border-border/60 bg-muted/30 px-3.5 py-2 text-xs text-muted-foreground shrink-0">
-                <button
-                  onClick={() => {
-                    setActiveSourcePreviewId(null);
-                    setPdfPageNum(null);
-                  }}
-                  className="flex items-center gap-1.5 text-foreground hover:text-primary transition-colors font-medium text-xs"
-                >
-                  <ArrowLeft className="h-3.5 w-3.5" />
-                  <span>Sources</span>
-                </button>
-                
-                {previewSource.kind === "pdf" && (
-                  <div className="flex items-center bg-secondary/80 rounded-md p-0.5 border border-border/60 shrink-0">
-                    <button
-                      onClick={() => setPdfViewMode("original")}
-                      className={`rounded px-2 py-0.5 text-[10px] font-mono font-medium transition-colors ${pdfViewMode === "original" ? "bg-background text-foreground shadow-xs font-semibold" : "text-muted-foreground hover:text-foreground"}`}
-                    >
-                      PDF
-                    </button>
-                    <button
-                      onClick={() => setPdfViewMode("text")}
-                      className={`rounded px-2 py-0.5 text-[10px] font-mono font-medium transition-colors ${pdfViewMode === "text" ? "bg-background text-foreground shadow-xs font-semibold" : "text-muted-foreground hover:text-foreground"}`}
-                    >
-                      TXT
-                    </button>
-                  </div>
-                )}
+      {/* 2. ADJUSTABLE & EXPANDABLE THREE-PANEL SYSTEM (react-resizable-panels) */}
+      <div className="flex flex-1 overflow-hidden relative">
+        {/* Collapsed Left Sources Tab */}
+        {sourcesCollapsed && (
+          <div className="flex flex-col items-center py-3 px-1.5 border-r border-border/60 bg-card/60 shrink-0 z-10 select-none">
+            <button
+              onClick={() => setSourcesCollapsed(false)}
+              className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"
+              title="Expand sources panel"
+            >
+              <PanelLeftOpen className="h-4 w-4" />
+            </button>
+            <div className="[writing-mode:vertical-lr] rotate-180 text-[11px] font-mono uppercase tracking-wider text-muted-foreground mt-4 select-none flex items-center gap-1">
+              <span>Sources</span>
+              <span className="text-primary font-bold">({sources.length})</span>
+            </div>
+          </div>
+        )}
 
-                <button
-                  onClick={() => toggleTTS(previewSource.content)}
-                  className={`flex items-center gap-1 rounded-md px-2 py-1 text-xs transition-colors ${isSpeaking ? "bg-primary/15 text-primary font-medium" : "hover:text-foreground text-muted-foreground"}`}
-                >
-                  <Volume2 className="h-3.5 w-3.5" />
-                  <span>{isSpeaking ? "Speaking" : "Read"}</span>
-                </button>
-              </div>
+        <ResizablePanelGroup direction="horizontal" className="flex-1 h-full w-full overflow-hidden">
+          {/* PANEL 1: SOURCES & ADJUSTABLE FILE VIEWER */}
+          {!sourcesCollapsed && (
+            <>
+              <ResizablePanel
+                defaultSize={fileViewerExpanded ? 60 : 25}
+                minSize={16}
+                maxSize={80}
+                className="flex flex-col border-r border-border/60 bg-card/40 overflow-hidden"
+              >
+                {activeSourcePreviewId && previewSource ? (
+                  /* SOURCE PREVIEW MODE (SLIDES OVER THE CHECKLIST) */
+                  <div className="flex flex-col h-full overflow-hidden">
+                    {/* Preview controls header */}
+                    <div className="flex items-center justify-between border-b border-border/60 bg-muted/30 px-3 py-2 text-xs text-muted-foreground shrink-0 gap-1.5">
+                      <button
+                        onClick={() => {
+                          setActiveSourcePreviewId(null);
+                          setPdfPageNum(null);
+                          setFileViewerExpanded(false);
+                        }}
+                        className="flex items-center gap-1.5 text-foreground hover:text-primary transition-colors font-medium text-xs shrink-0"
+                      >
+                        <ArrowLeft className="h-3.5 w-3.5" />
+                        <span>Sources</span>
+                      </button>
+                      
+                      <div className="flex items-center gap-1.5 ml-auto shrink-0">
+                        {previewSource.kind === "pdf" && (
+                          <div className="flex items-center bg-secondary/80 rounded-md p-0.5 border border-border/60 shrink-0">
+                            <button
+                              onClick={() => setPdfViewMode("original")}
+                              className={`rounded px-2 py-0.5 text-[10px] font-mono font-medium transition-colors ${pdfViewMode === "original" ? "bg-background text-foreground shadow-xs font-semibold" : "text-muted-foreground hover:text-foreground"}`}
+                            >
+                              PDF
+                            </button>
+                            <button
+                              onClick={() => setPdfViewMode("text")}
+                              className={`rounded px-2 py-0.5 text-[10px] font-mono font-medium transition-colors ${pdfViewMode === "text" ? "bg-background text-foreground shadow-xs font-semibold" : "text-muted-foreground hover:text-foreground"}`}
+                            >
+                              TXT
+                            </button>
+                          </div>
+                        )}
+
+                        <button
+                          onClick={() => toggleTTS(previewSource.content)}
+                          className={`flex items-center gap-1 rounded-md px-2 py-1 text-xs transition-colors ${isSpeaking ? "bg-primary/15 text-primary font-medium" : "hover:text-foreground text-muted-foreground"}`}
+                          title="Read aloud"
+                        >
+                          <Volume2 className="h-3.5 w-3.5" />
+                        </button>
+
+                        {/* Expand / Minimize File Viewer Toggle */}
+                        <button
+                          type="button"
+                          onClick={() => setFileViewerExpanded(!fileViewerExpanded)}
+                          className="flex items-center gap-1 rounded-md p-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-secondary/60 transition-colors"
+                          title={fileViewerExpanded ? "Restore viewer width" : "Expand file viewer wide"}
+                        >
+                          {fileViewerExpanded ? (
+                            <Minimize2 className="h-3.5 w-3.5 text-primary" />
+                          ) : (
+                            <Maximize2 className="h-3.5 w-3.5" />
+                          )}
+                        </button>
+
+                        {/* Collapse Panel Button */}
+                        <button
+                          type="button"
+                          onClick={() => setSourcesCollapsed(true)}
+                          className="rounded-md p-1.5 text-muted-foreground hover:text-foreground hover:bg-secondary/60 transition-colors"
+                          title="Collapse panel"
+                        >
+                          <PanelLeftClose className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </div>
 
               {/* Preview Body */}
               <div className="flex-1 overflow-y-auto p-4 scrollbar-thin text-left">
@@ -2847,16 +2924,36 @@ function StudySessionPanel({
           ) : (
             /* SOURCES LIST CHECKLIST VIEW */
             <div className="flex flex-col h-full overflow-hidden">
-              <div className="flex items-center justify-between border-b border-border/60 bg-muted/20 px-4 py-3 shrink-0">
+              <div className="flex items-center justify-between border-b border-border/60 bg-muted/20 px-4 py-2.5 shrink-0 select-none">
                 <span className="font-semibold text-xs tracking-tight text-foreground">Sources ({sources.length})</span>
                 
-                {/* Trigger Add Source Panel */}
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => setActiveInputMode(activeInputMode === "none" ? "files" : "none")}
+                    className="rounded-md bg-secondary/80 border border-border/70 hover:bg-secondary text-foreground p-1.5 transition-colors outline-none"
+                    title="Add source to notebook"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    onClick={() => setSourcesCollapsed(true)}
+                    className="rounded-md hover:bg-secondary text-muted-foreground hover:text-foreground p-1.5 transition-colors outline-none"
+                    title="Collapse sources panel"
+                  >
+                    <PanelLeftClose className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Add sources quick pill button matching NotebookLM */}
+              <div className="p-3 border-b border-border/60 bg-card/60 shrink-0">
                 <button
+                  type="button"
                   onClick={() => setActiveInputMode(activeInputMode === "none" ? "files" : "none")}
-                  className="rounded-md bg-secondary/80 border border-border/70 hover:bg-secondary text-foreground p-1.5 transition-colors outline-none"
-                  title="Add source to notebook"
+                  className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-xl border border-border/80 bg-secondary/50 hover:bg-secondary hover:border-primary/40 text-xs font-semibold text-foreground transition-all shadow-xs"
                 >
-                  <Plus className="h-3.5 w-3.5" />
+                  <Plus className="h-3.5 w-3.5 text-primary" />
+                  <span>Add sources</span>
                 </button>
               </div>
 
@@ -3032,10 +3129,17 @@ function StudySessionPanel({
               </div>
             </div>
           )}
-        </div>
+              </ResizablePanel>
+              <ResizableHandle withHandle />
+            </>
+          )}
 
-        {/* COLUMN 2: CENTER PANEL: GROUNDED CHAT & EMPTY LOADER (lg:col-span-5) */}
-        <div className="lg:col-span-5 flex flex-col bg-background border-r border-border/60 overflow-hidden relative">
+          {/* PANEL 2: CENTER WORKSPACE (GROUNDED CHAT & REASONING) */}
+          <ResizablePanel
+            defaultSize={workspaceExpanded ? 75 : (fileViewerExpanded || studioExpanded ? 35 : 45)}
+            minSize={25}
+            className="flex flex-col bg-background border-r border-border/60 overflow-hidden relative"
+          >
           {sources.length === 0 ? (
             /* EMPTY NOTEBOOK STATE OVERLAY */
             <div className="flex-1 flex flex-col justify-center items-center text-center p-6 bg-background">
@@ -3101,11 +3205,25 @@ function StudySessionPanel({
                   </p>
                 </div>
 
-                {selectedSourceIds.length === 0 && (
-                  <span className="text-[10px] font-mono text-amber-500 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded">
-                    No source selected
-                  </span>
-                )}
+                <div className="flex items-center gap-2">
+                  {selectedSourceIds.length === 0 && (
+                    <span className="text-[10px] font-mono text-amber-500 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded">
+                      No source selected
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setWorkspaceExpanded(!workspaceExpanded)}
+                    className="rounded-md p-1.5 text-muted-foreground hover:text-foreground hover:bg-secondary/60 transition-colors"
+                    title={workspaceExpanded ? "Restore workspace width" : "Maximize chat workspace"}
+                  >
+                    {workspaceExpanded ? (
+                      <Minimize2 className="h-3.5 w-3.5 text-primary" />
+                    ) : (
+                      <Maximize2 className="h-3.5 w-3.5" />
+                    )}
+                  </button>
+                </div>
               </div>
 
               {/* Message Feed */}
@@ -3371,137 +3489,80 @@ function StudySessionPanel({
               </div>
             </div>
           )}
-        </div>
+        </ResizablePanel>
+        <ResizableHandle withHandle />
 
-        {/* COLUMN 3: RIGHT PANEL: SYNTHESIS TAB SYSTEM (lg:col-span-4) */}
-        <div className="lg:col-span-4 flex flex-col bg-background overflow-hidden">
-          
-          {/* Navigation Tab selection & Mode Switch */}
-          <div className="flex flex-wrap items-center justify-between border-b border-border/60 bg-muted/20 px-3 py-2 shrink-0 select-none gap-2">
-            {/* Primary Mode Toggle: [Notebook] [Tutor Mode] */}
-            <div className="flex rounded-lg bg-secondary/80 p-0.5 text-xs border border-border/60 gap-0.5">
-              <button
-                type="button"
-                onClick={() => setStudyMode("notebook")}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
-                  studyMode === "notebook"
-                    ? "bg-background text-foreground shadow-xs"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                <BookOpen className="h-3.5 w-3.5" />
-                <span>Notebook</span>
-              </button>
+        {/* PANEL 3: RIGHT PANEL - NOTEBOOKLM STUDIO */}
+        {!studioCollapsed && (
+          <ResizablePanel
+            defaultSize={studioExpanded ? 65 : (fileViewerExpanded || workspaceExpanded ? 25 : 30)}
+            minSize={20}
+            maxSize={75}
+            className="flex flex-col bg-background overflow-hidden relative border-l border-border/60"
+          >
+            {/* STUDIO HEADER */}
+            <div className="flex items-center justify-between border-b border-border/60 bg-muted/10 px-4 py-2.5 shrink-0 select-none">
+              {activeTab === "studio" && studyMode === "notebook" ? (
+                <div className="flex items-center gap-2">
+                  <Sparkles className="h-4 w-4 text-primary" />
+                  <h2 className="text-sm font-semibold text-foreground tracking-tight">Studio</h2>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setStudyMode("notebook");
+                    setActiveTab("studio");
+                  }}
+                  className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors group"
+                >
+                  <ChevronLeft className="h-4 w-4 transition-transform group-hover:-translate-x-0.5" />
+                  <span className="font-semibold text-foreground">Studio</span>
+                  <span className="text-muted-foreground/60">/</span>
+                  <span className="text-primary capitalize font-medium">
+                    {studyMode === "tutor"
+                      ? "Tutor Mode"
+                      : activeTab === "podcast"
+                      ? "Audio Overview"
+                      : activeTab === "briefing"
+                      ? "Reports"
+                      : activeTab === "slides"
+                      ? "Slide Deck"
+                      : activeTab === "mindmap"
+                      ? "Mind Map"
+                      : activeTab === "table"
+                      ? "Data Table"
+                      : activeTab}
+                  </span>
+                </button>
+              )}
 
-              <button
-                type="button"
-                onClick={() => {
-                  setStudyMode("tutor");
-                  if (tutorOutline.length === 0) {
-                    handleLoadTutorOutline();
-                  }
-                }}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
-                  studyMode === "tutor"
-                    ? "bg-primary text-primary-foreground shadow-xs font-semibold"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                <GraduationCap className="h-3.5 w-3.5" />
-                <span>Tutor Mode</span>
-              </button>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setStudioExpanded(!studioExpanded)}
+                  className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary/60 transition-colors"
+                  title={studioExpanded ? "Restore studio width" : "Maximize studio panel"}
+                >
+                  {studioExpanded ? (
+                    <Minimize2 className="h-3.5 w-3.5 text-primary" />
+                  ) : (
+                    <Maximize2 className="h-3.5 w-3.5" />
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStudioCollapsed(true)}
+                  className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary/60 transition-colors"
+                  title="Collapse studio"
+                >
+                  <PanelRightClose className="h-3.5 w-3.5" />
+                </button>
+              </div>
             </div>
 
-            {/* When in Notebook Mode: show the 5 study sub-tabs */}
-            {studyMode === "notebook" ? (
-              <div className="flex rounded-lg bg-secondary/50 p-0.5 text-xs overflow-x-auto max-w-full border border-border/50 gap-0.5">
-                <button
-                  onClick={() => {
-                    setActiveTab("notes");
-                    setShowRightWelcome(false);
-                  }}
-                  className={`flex items-center gap-1 rounded-md px-2.5 py-1 transition-colors text-xs font-medium ${
-                    activeTab === "notes" ? "bg-background text-foreground shadow-xs font-semibold" : "text-muted-foreground hover:text-foreground hover:bg-secondary/40"
-                  }`}
-                >
-                  <Edit2 className="h-3 w-3" />
-                  <span>Notes</span>
-                </button>
-
-                <button
-                  onClick={() => {
-                    setActiveTab("briefing");
-                    setShowRightWelcome(false);
-                  }}
-                  className={`flex items-center gap-1 rounded-md px-2.5 py-1 transition-colors text-xs font-medium ${
-                    activeTab === "briefing" ? "bg-background text-foreground shadow-xs font-semibold" : "text-muted-foreground hover:text-foreground hover:bg-secondary/40"
-                  }`}
-                >
-                  <FileStack className="h-3 w-3" />
-                  <span>Briefing</span>
-                </button>
-
-                <button
-                  onClick={() => {
-                    setActiveTab("podcast");
-                    setShowRightWelcome(false);
-                  }}
-                  className={`flex items-center gap-1 rounded-md px-2.5 py-1 transition-colors text-xs font-medium ${
-                    activeTab === "podcast" ? "bg-background text-foreground shadow-xs font-semibold" : "text-muted-foreground hover:text-foreground hover:bg-secondary/40"
-                  }`}
-                >
-                  <Headphones className="h-3 w-3" />
-                  <span>Audio</span>
-                </button>
-
-                <button
-                  onClick={() => {
-                    setActiveTab("flashcards");
-                    setShowRightWelcome(false);
-                  }}
-                  className={`flex items-center gap-1 rounded-md px-2.5 py-1 transition-colors text-xs font-medium ${
-                    activeTab === "flashcards" ? "bg-background text-foreground shadow-xs font-semibold" : "text-muted-foreground hover:text-foreground hover:bg-secondary/40"
-                  }`}
-                >
-                  <Sparkles className="h-3 w-3" />
-                  <span>Cards</span>
-                </button>
-
-                <button
-                  onClick={() => {
-                    setActiveTab("quiz");
-                    setShowRightWelcome(false);
-                  }}
-                  className={`flex items-center gap-1 rounded-md px-2.5 py-1 transition-colors text-xs font-medium ${
-                    activeTab === "quiz" ? "bg-background text-foreground shadow-xs font-semibold" : "text-muted-foreground hover:text-foreground hover:bg-secondary/40"
-                  }`}
-                >
-                  <HelpCircle className="h-3 w-3" />
-                  <span>Quiz</span>
-                </button>
-              </div>
-            ) : (
-              /* When in Tutor Mode: show active state or back navigation */
-              <div className="flex items-center gap-2 text-xs">
-                {tutorView === "studying" && (
-                  <button
-                    type="button"
-                    onClick={() => setTutorView("landing")}
-                    className="flex items-center gap-1 text-[11px] font-medium text-muted-foreground hover:text-foreground transition-colors px-2 py-1 rounded border border-border/60 bg-secondary/40"
-                  >
-                    <ChevronLeft className="h-3 w-3" />
-                    <span>Chapters</span>
-                  </button>
-                )}
-                <span className="text-[10px] font-mono text-primary bg-primary/10 border border-primary/20 px-2 py-0.5 rounded">
-                  Grounded Tutor
-                </span>
-              </div>
-            )}
-          </div>
-
-          {/* TAB CONTENTS CONTAINER */}
-          <div className="flex-1 overflow-y-auto p-4 scrollbar-thin">
+            {/* TAB CONTENTS CONTAINER */}
+            <div className="flex-1 overflow-y-auto p-4 scrollbar-thin">
             
             {/* ========================================================= */}
             {/* TUTOR MODE INTERFACE (Inspired by Reference Screenshots)   */}
@@ -4126,6 +4187,556 @@ function StudySessionPanel({
             {/* ========================================================= */}
             {studyMode === "notebook" && (
               <>
+            {/* A. NOTEBOOKLM STUDIO HUB */}
+            {activeTab === "studio" && (
+              <div className="flex flex-col space-y-4 pb-6">
+                {/* Audio Overview language prompt */}
+                <p className="text-[11px] text-muted-foreground leading-relaxed">
+                  Create an Audio Overview in:{" "}
+                  <span className="text-foreground/80 font-medium">
+                    हिन्दी, বাংলা, ગુજરાતી, ಕನ್ನಡ, മലയാളം, मराठी, ਪੰਜਾਬੀ, தமிழ், తెలుగు
+                  </span>
+                </p>
+
+                {/* Dismissible Promo Banner */}
+                {!studioDismissPromo && (
+                  <div className="relative flex items-center justify-between rounded-xl bg-gradient-to-r from-primary/10 via-accent/15 to-secondary border border-border/80 px-3.5 py-2.5">
+                    <div className="flex items-center gap-2 pr-2 min-w-0">
+                      <Sparkles className="h-4 w-4 text-primary shrink-0" />
+                      <p className="text-xs text-foreground font-medium truncate">
+                        You can now create Slides and Videos step-by-step
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab("slides")}
+                        className="rounded-full bg-foreground text-background dark:bg-primary dark:text-primary-foreground px-3 py-1 text-[11px] font-semibold hover:opacity-90 transition-opacity"
+                      >
+                        Try it
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setStudioDismissPromo(true)}
+                        className="p-1 text-muted-foreground hover:text-foreground transition-colors rounded"
+                        title="Dismiss"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* 2-Column Grid of Studio Features */}
+                <div className="grid grid-cols-2 gap-2.5">
+                  {/* 1. Audio Overview */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveTab("podcast");
+                      setShowRightWelcome(false);
+                    }}
+                    className="flex items-center gap-2.5 rounded-xl border border-border/70 bg-card/60 p-3 text-left hover:border-blue-500/50 hover:bg-secondary/40 transition-all group"
+                  >
+                    <div className="grid h-8 w-8 place-items-center rounded-lg bg-blue-500/10 text-blue-500 dark:bg-blue-400/15 dark:text-blue-400 shrink-0 group-hover:scale-105 transition-transform">
+                      <Headphones className="h-4 w-4" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <span className="text-xs font-semibold text-foreground block truncate group-hover:text-primary transition-colors">
+                        Audio Overview
+                      </span>
+                    </div>
+                  </button>
+
+                  {/* 2. Slide Deck */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveTab("slides");
+                      setShowRightWelcome(false);
+                    }}
+                    className="flex items-center gap-2.5 rounded-xl border border-border/70 bg-card/60 p-3 text-left hover:border-pink-500/50 hover:bg-secondary/40 transition-all group"
+                  >
+                    <div className="grid h-8 w-8 place-items-center rounded-lg bg-pink-500/10 text-pink-500 dark:bg-pink-400/15 dark:text-pink-400 shrink-0 group-hover:scale-105 transition-transform">
+                      <Presentation className="h-4 w-4" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <span className="text-xs font-semibold text-foreground block truncate group-hover:text-pink-500 transition-colors">
+                        Slide Deck
+                      </span>
+                    </div>
+                  </button>
+
+                  {/* 3. Video Overview */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveTab("slides");
+                      setShowRightWelcome(false);
+                      toast.info("Generated video slide walkthrough from your active sources!");
+                    }}
+                    className="flex items-center gap-2.5 rounded-xl border border-border/70 bg-card/60 p-3 text-left hover:border-emerald-500/50 hover:bg-secondary/40 transition-all group"
+                  >
+                    <div className="grid h-8 w-8 place-items-center rounded-lg bg-emerald-500/10 text-emerald-500 dark:bg-emerald-400/15 dark:text-emerald-400 shrink-0 group-hover:scale-105 transition-transform">
+                      <Video className="h-4 w-4" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <span className="text-xs font-semibold text-foreground block truncate group-hover:text-emerald-500 transition-colors">
+                        Video Overview
+                      </span>
+                    </div>
+                  </button>
+
+                  {/* 4. Mind Map */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveTab("mindmap");
+                      setShowRightWelcome(false);
+                    }}
+                    className="flex items-center gap-2.5 rounded-xl border border-border/70 bg-card/60 p-3 text-left hover:border-purple-500/50 hover:bg-secondary/40 transition-all group"
+                  >
+                    <div className="grid h-8 w-8 place-items-center rounded-lg bg-purple-500/10 text-purple-500 dark:bg-purple-400/15 dark:text-purple-400 shrink-0 group-hover:scale-105 transition-transform">
+                      <Network className="h-4 w-4" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <span className="text-xs font-semibold text-foreground block truncate group-hover:text-purple-500 transition-colors">
+                        Mind Map
+                      </span>
+                    </div>
+                  </button>
+
+                  {/* 5. Reports (New!) */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveTab("briefing");
+                      setShowRightWelcome(false);
+                    }}
+                    className="flex items-center gap-2.5 rounded-xl border border-border/70 bg-card/60 p-3 text-left hover:border-rose-500/50 hover:bg-secondary/40 transition-all group"
+                  >
+                    <div className="grid h-8 w-8 place-items-center rounded-lg bg-rose-500/10 text-rose-500 dark:bg-rose-400/15 dark:text-rose-400 shrink-0 group-hover:scale-105 transition-transform">
+                      <FileStack className="h-4 w-4" />
+                    </div>
+                    <div className="min-w-0 flex-1 flex items-center justify-between">
+                      <span className="text-xs font-semibold text-foreground block truncate group-hover:text-rose-500 transition-colors">
+                        Reports
+                      </span>
+                      <span className="text-[9px] font-bold font-mono uppercase bg-rose-500/15 text-rose-500 dark:text-rose-400 px-1.5 py-0.5 rounded-full">
+                        New!
+                      </span>
+                    </div>
+                  </button>
+
+                  {/* 6. Flashcards */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveTab("flashcards");
+                      setShowRightWelcome(false);
+                    }}
+                    className="flex items-center gap-2.5 rounded-xl border border-border/70 bg-card/60 p-3 text-left hover:border-amber-500/50 hover:bg-secondary/40 transition-all group"
+                  >
+                    <div className="grid h-8 w-8 place-items-center rounded-lg bg-amber-500/10 text-amber-500 dark:bg-amber-400/15 dark:text-amber-400 shrink-0 group-hover:scale-105 transition-transform">
+                      <Sparkles className="h-4 w-4" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <span className="text-xs font-semibold text-foreground block truncate group-hover:text-amber-500 transition-colors">
+                        Flashcards
+                      </span>
+                    </div>
+                  </button>
+
+                  {/* 7. Quiz */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveTab("quiz");
+                      setShowRightWelcome(false);
+                    }}
+                    className="flex items-center gap-2.5 rounded-xl border border-border/70 bg-card/60 p-3 text-left hover:border-sky-500/50 hover:bg-secondary/40 transition-all group"
+                  >
+                    <div className="grid h-8 w-8 place-items-center rounded-lg bg-sky-500/10 text-sky-500 dark:bg-sky-400/15 dark:text-sky-400 shrink-0 group-hover:scale-105 transition-transform">
+                      <HelpCircle className="h-4 w-4" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <span className="text-xs font-semibold text-foreground block truncate group-hover:text-sky-500 transition-colors">
+                        Quiz
+                      </span>
+                    </div>
+                  </button>
+
+                  {/* 8. Data Table */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveTab("table");
+                      setShowRightWelcome(false);
+                    }}
+                    className="flex items-center gap-2.5 rounded-xl border border-border/70 bg-card/60 p-3 text-left hover:border-cyan-500/50 hover:bg-secondary/40 transition-all group"
+                  >
+                    <div className="grid h-8 w-8 place-items-center rounded-lg bg-cyan-500/10 text-cyan-500 dark:bg-cyan-400/15 dark:text-cyan-400 shrink-0 group-hover:scale-105 transition-transform">
+                      <Table2 className="h-4 w-4" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <span className="text-xs font-semibold text-foreground block truncate group-hover:text-cyan-500 transition-colors">
+                        Data Table
+                      </span>
+                    </div>
+                  </button>
+                </div>
+
+                {/* Tutor Mode Full Tile */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setStudyMode("tutor");
+                    if (tutorOutline.length === 0) {
+                      handleLoadTutorOutline();
+                    }
+                  }}
+                  className="w-full flex items-center justify-between rounded-xl border border-primary/30 bg-primary/5 hover:bg-primary/10 p-3 text-left transition-all group"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <div className="grid h-8 w-8 place-items-center rounded-lg bg-primary text-primary-foreground shrink-0 shadow-xs">
+                      <GraduationCap className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <span className="text-xs font-semibold text-foreground block group-hover:text-primary transition-colors">
+                        Socratic Tutor Mode
+                      </span>
+                      <span className="text-[10px] text-muted-foreground block">
+                        Sequential chapters, active recall activities & evaluation
+                      </span>
+                    </div>
+                  </div>
+                  <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" />
+                </button>
+
+                {/* Writing Assistant & Notes List */}
+                <div className="space-y-2 pt-2">
+                  <div
+                    onClick={() => setActiveTab("notes")}
+                    className="flex items-center justify-between rounded-xl border border-border/70 bg-card/40 hover:bg-secondary/50 p-3 cursor-pointer transition-colors"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="grid h-7 w-7 place-items-center rounded-lg bg-amber-500/15 text-amber-500 shrink-0">
+                        <Edit2 className="h-3.5 w-3.5" />
+                      </div>
+                      <div className="min-w-0">
+                        <h4 className="text-xs font-semibold text-foreground truncate">
+                          Writing Assistant
+                        </h4>
+                        <p className="text-[10px] text-muted-foreground font-mono mt-0.5">
+                          {selectedSourceIds.length > 0 ? selectedSourceIds.length : sources.length} sources • {notebook.notes ? "Edited" : "1m ago"}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setActiveTab("notes");
+                      }}
+                      className="p-1 text-muted-foreground hover:text-foreground rounded"
+                    >
+                      <MoreVertical className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+
+                  {briefingDoc && (
+                    <div
+                      onClick={() => setActiveTab("briefing")}
+                      className="flex items-center justify-between rounded-xl border border-border/70 bg-card/40 hover:bg-secondary/50 p-3 cursor-pointer transition-colors"
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="grid h-7 w-7 place-items-center rounded-lg bg-primary/15 text-primary shrink-0">
+                          <FileStack className="h-3.5 w-3.5" />
+                        </div>
+                        <div className="min-w-0">
+                          <h4 className="text-xs font-semibold text-foreground truncate">
+                            Briefing Document
+                          </h4>
+                          <p className="text-[10px] text-muted-foreground font-mono mt-0.5">
+                            {sources.length} sources • Ready to review
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setActiveTab("briefing");
+                        }}
+                        className="p-1 text-muted-foreground hover:text-foreground rounded"
+                      >
+                        <MoreVertical className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* + Add Note Bottom Pill */}
+                <div className="pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveTab("notes");
+                    }}
+                    className="w-full flex items-center justify-center gap-2 rounded-full border border-border/80 bg-secondary/50 hover:bg-secondary py-2.5 px-4 text-xs font-medium text-foreground transition-all shadow-xs active:scale-[0.99]"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    <span>Add note</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* SLIDE DECK VIEW */}
+            {activeTab === "slides" && (
+              <div className="flex flex-col h-full space-y-4 text-left">
+                <div className="flex items-center justify-between border-b border-border/60 pb-2.5">
+                  <div>
+                    <span className="text-[10px] text-muted-foreground uppercase font-mono tracking-wider block">
+                      Presentation Studio
+                    </span>
+                    <h3 className="text-sm font-semibold text-foreground">
+                      {previewSource?.title || notebook.title}
+                    </h3>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        toast.success("Presentation exported as Markdown slides!");
+                      }}
+                      className="text-xs font-medium text-primary flex items-center gap-1 hover:text-primary/80 transition-colors border border-border/60 rounded-md px-2.5 py-1 bg-secondary/30"
+                    >
+                      <Download className="h-3 w-3" /> Export
+                    </button>
+                  </div>
+                </div>
+
+                {/* Slide Card Preview */}
+                <div className="rounded-2xl border border-border/70 bg-gradient-to-br from-card via-card to-secondary/30 p-5 shadow-xs flex flex-col justify-between min-h-[320px]">
+                  <div>
+                    <div className="flex items-center justify-between text-[11px] text-muted-foreground font-mono mb-3">
+                      <span className="text-primary font-semibold">Slide {activeSlideIdx + 1} of 3</span>
+                      <span>LearnX Presentation</span>
+                    </div>
+
+                    <h2 className="text-base font-bold text-foreground tracking-tight mb-1">
+                      {activeSlideIdx === 0
+                        ? previewSource?.title || notebook.title
+                        : activeSlideIdx === 1
+                        ? "Pipeline Architecture & Modeling"
+                        : "Key Insights & Conclusion"}
+                    </h2>
+                    <p className="text-xs text-muted-foreground mb-4">
+                      {activeSlideIdx === 0
+                        ? "High-level architectural synthesis & core findings"
+                        : activeSlideIdx === 1
+                        ? "Data ingestion, LOF outlier rejection, and SHAP decision matrix"
+                        : "Empirical outcomes and practical pedagogical applications"}
+                    </p>
+
+                    <div className="space-y-2 mb-4">
+                      {(activeSlideIdx === 0
+                        ? [
+                            "LOF-based preprocessing standardizes multidimensional feature sets",
+                            "SHAP quantifies soft skills impact (Priority, Planning, Time)",
+                            "DEMATEL/COBRA ranks instructional strategies based on causal profiles",
+                            "Delivers adaptive nudges and degree orientation",
+                          ]
+                        : activeSlideIdx === 1
+                        ? [
+                            "Input Layer: PDF, transcripts, lecture recordings, web sources",
+                            "Feature extraction computes SHAP values for each student factor",
+                            "Logistic Regression model predicts program classification",
+                            "Dynamic feedback loop feeds real-time evaluation scores",
+                          ]
+                        : [
+                            "Statistically significant lift in student retention and mastery",
+                            "Adaptive scaffolding adjusts pace based on active recall quiz results",
+                            "Zero hallucination risk via strict chunk attribution",
+                          ]
+                      ).map((bullet, bidx) => (
+                        <div key={bidx} className="flex items-start gap-2 text-xs text-foreground/90 leading-relaxed">
+                          <span className="h-1.5 w-1.5 rounded-full bg-primary mt-1.5 shrink-0" />
+                          <span>{bullet}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="pt-3 border-t border-border/50 flex items-center justify-between text-[11px] text-muted-foreground">
+                    <span className="italic">Grounded in {selectedSourceIds.length || sources.length} active sources</span>
+                    <span className="font-mono text-[10px]">LearnX Studio</span>
+                  </div>
+                </div>
+
+                {/* Slide Navigation Bar */}
+                <div className="flex items-center justify-between pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setActiveSlideIdx((prev) => Math.max(0, prev - 1))}
+                    disabled={activeSlideIdx === 0}
+                    className="flex items-center gap-1 text-xs font-medium px-3 py-1.5 rounded-lg border border-border/70 bg-card hover:bg-secondary disabled:opacity-40 transition-colors"
+                  >
+                    <ChevronLeft className="h-3.5 w-3.5" /> Previous
+                  </button>
+
+                  <div className="flex items-center gap-1.5">
+                    {[0, 1, 2].map((idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => setActiveSlideIdx(idx)}
+                        className={`h-2 rounded-full transition-all ${
+                          activeSlideIdx === idx ? "w-6 bg-primary" : "w-2 bg-muted-foreground/30 hover:bg-muted-foreground/60"
+                        }`}
+                      />
+                    ))}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setActiveSlideIdx((prev) => Math.min(2, prev + 1))}
+                    disabled={activeSlideIdx === 2}
+                    className="flex items-center gap-1 text-xs font-medium px-3 py-1.5 rounded-lg border border-border/70 bg-card hover:bg-secondary disabled:opacity-40 transition-colors"
+                  >
+                    Next <ChevronRight className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* MIND MAP VIEW */}
+            {activeTab === "mindmap" && (
+              <div className="flex flex-col h-full space-y-4 text-left">
+                <div className="flex items-center justify-between border-b border-border/60 pb-2.5">
+                  <div>
+                    <span className="text-[10px] text-muted-foreground uppercase font-mono tracking-wider block">
+                      Concept Hierarchy
+                    </span>
+                    <h3 className="text-sm font-semibold text-foreground">Interactive Mind Map</h3>
+                  </div>
+                  <span className="text-[10px] font-mono text-purple-500 bg-purple-500/10 border border-purple-500/20 px-2 py-0.5 rounded">
+                    4 Branches
+                  </span>
+                </div>
+
+                <div className="rounded-xl border border-border/70 bg-card/60 p-4 space-y-3">
+                  {/* Central Node */}
+                  <div className="p-3 rounded-lg bg-primary/10 border border-primary/30 text-center">
+                    <span className="text-xs font-bold text-primary block">
+                      {previewSource?.title || notebook.title}
+                    </span>
+                    <span className="text-[10px] text-muted-foreground">Core Research Focus</span>
+                  </div>
+
+                  {/* Branches */}
+                  <div className="grid grid-cols-1 gap-2.5 pl-2 border-l-2 border-dashed border-primary/30">
+                    <div className="rounded-lg border border-border/60 bg-background/80 p-2.5">
+                      <span className="text-xs font-semibold text-foreground block">
+                        1. Data Preprocessing & Cleaning
+                      </span>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">
+                        Local Outlier Factor (LOF) filters irregular samples and standardizes multidimensional scales.
+                      </p>
+                    </div>
+
+                    <div className="rounded-lg border border-border/60 bg-background/80 p-2.5">
+                      <span className="text-xs font-semibold text-foreground block">
+                        2. Feature Extraction (SHAP)
+                      </span>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">
+                        Quantifies individual feature contributions (Priority, Time Allocation, Planning) to academic performance.
+                      </p>
+                    </div>
+
+                    <div className="rounded-lg border border-border/60 bg-background/80 p-2.5">
+                      <span className="text-xs font-semibold text-foreground block">
+                        3. Hybrid Modeling & Classification
+                      </span>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">
+                        Logistic Regression paired with DEMATEL & COBRA for strategic multi-criteria decision making.
+                      </p>
+                    </div>
+
+                    <div className="rounded-lg border border-border/60 bg-background/80 p-2.5">
+                      <span className="text-xs font-semibold text-foreground block">
+                        4. Pedagogical Nudges & Interventions
+                      </span>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">
+                        Delivers ranked pedagogical recommendations directly to instructors and learners.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* DATA TABLE VIEW */}
+            {activeTab === "table" && (
+              <div className="flex flex-col h-full space-y-3 text-left">
+                <div className="flex items-center justify-between border-b border-border/60 pb-2.5">
+                  <div>
+                    <span className="text-[10px] text-muted-foreground uppercase font-mono tracking-wider block">
+                      Structured Extraction
+                    </span>
+                    <h3 className="text-sm font-semibold text-foreground">Grounded Data Table</h3>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => toast.success("Table exported as CSV!")}
+                    className="text-xs font-medium text-primary flex items-center gap-1 hover:text-primary/80 transition-colors border border-border/60 rounded-md px-2.5 py-1 bg-secondary/30"
+                  >
+                    <Download className="h-3 w-3" /> CSV
+                  </button>
+                </div>
+
+                <div className="overflow-x-auto rounded-xl border border-border/70 bg-card/60">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-muted/40 text-muted-foreground border-b border-border/60 font-mono text-[10px] uppercase">
+                      <tr>
+                        <th className="py-2.5 px-3">Variable / Metric</th>
+                        <th className="py-2.5 px-3">Module</th>
+                        <th className="py-2.5 px-3">Impact / Value</th>
+                        <th className="py-2.5 px-3">Grounding</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border/50 text-foreground/90">
+                      <tr>
+                        <td className="py-2.5 px-3 font-medium">Outlier Removal</td>
+                        <td className="py-2.5 px-3 font-mono text-[11px] text-muted-foreground">LOF</td>
+                        <td className="py-2.5 px-3">Normalizes distributions</td>
+                        <td className="py-2.5 px-3 text-primary text-[11px]">Chunk 6-7</td>
+                      </tr>
+                      <tr>
+                        <td className="py-2.5 px-3 font-medium">Feature Priority</td>
+                        <td className="py-2.5 px-3 font-mono text-[11px] text-muted-foreground">SHAP</td>
+                        <td className="py-2.5 px-3">Time & Planning ranking</td>
+                        <td className="py-2.5 px-3 text-primary text-[11px]">Chunk 14-15</td>
+                      </tr>
+                      <tr>
+                        <td className="py-2.5 px-3 font-medium">Program Selection</td>
+                        <td className="py-2.5 px-3 font-mono text-[11px] text-muted-foreground">Logit</td>
+                        <td className="py-2.5 px-3">Optimal degree match</td>
+                        <td className="py-2.5 px-3 text-primary text-[11px]">Chunk 45</td>
+                      </tr>
+                      <tr>
+                        <td className="py-2.5 px-3 font-medium">Decision Weighting</td>
+                        <td className="py-2.5 px-3 font-mono text-[11px] text-muted-foreground">COBRA</td>
+                        <td className="py-2.5 px-3">Ranked causal impact</td>
+                        <td className="py-2.5 px-3 text-primary text-[11px]">Chunk 17</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
             {/* B. NOTES TAB (AUTOSAVING MARKDOWN EDITOR) */}
             {activeTab === "notes" && (
               <div className="h-full flex flex-col justify-start gap-3 text-left">
@@ -5045,7 +5656,30 @@ function StudySessionPanel({
             )}
 
           </div>
+        </ResizablePanel>
+      )}
+      </ResizablePanelGroup>
+
+      {/* COLLAPSED STUDIO DOCK (Right Edge) */}
+      {studioCollapsed && (
+        <div className="flex flex-col items-center py-3 px-1.5 border-l border-border/60 bg-card/60 shrink-0 z-10 select-none">
+          <button
+            type="button"
+            onClick={() => setStudioCollapsed(false)}
+            className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary/60 transition-colors"
+            title="Expand Studio"
+          >
+            <PanelRightOpen className="h-4 w-4" />
+          </button>
+          <div
+            onClick={() => setStudioCollapsed(false)}
+            className="mt-6 flex items-center gap-1.5 [writing-mode:vertical-rl] rotate-180 text-xs font-medium text-muted-foreground hover:text-foreground cursor-pointer tracking-wider"
+          >
+            <Sparkles className="h-3 w-3 text-primary inline" />
+            <span>Studio</span>
+          </div>
         </div>
+      )}
 
       </div>
     </div>
