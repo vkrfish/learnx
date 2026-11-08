@@ -51,7 +51,7 @@ load_dotenv()
 if os.getenv("LANGCHAIN_API_KEY") or os.getenv("LANGSMITH_API_KEY"):
     os.environ["LANGCHAIN_TRACING_V2"] = "true"
     if not os.getenv("LANGCHAIN_PROJECT"):
-        os.environ["LANGCHAIN_PROJECT"] = "learnx-production"
+        os.environ["LANGCHAIN_PROJECT"] = "learnx"
     print(f"[Observability] LangSmith tracing enabled for project: {os.environ.get('LANGCHAIN_PROJECT')}")
 
 app = FastAPI(title="Ultra Learn FastAPI RAG Service")

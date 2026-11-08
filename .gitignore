@@ -47,3 +47,7 @@ check_api.py
 *.njsproj
 *.sln
 *.sw?
+
+# Cloned reference projects
+reverse engineer/
+taste-skill/

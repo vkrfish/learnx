@@ -3002,7 +3002,7 @@ function StudySessionPanel({
                               ) : src.kind === "website" ? (
                                 <Globe className="h-2.5 w-2.5 text-blue-400" />
                               ) : src.kind === "research" ? (
-                                <Search className="h-2.5 w-2.5 text-emerald-400" />
+                                <Search className="h-2.5 w-2.5 text-mint" />
                               ) : (
                                 <Type className="h-2.5 w-2.5 text-purple-400" />
                               )}
@@ -3075,7 +3075,7 @@ function StudySessionPanel({
                   onClick={() => setActiveInputMode("research")}
                   className="rounded-lg border border-border/70 bg-card p-3 hover:border-primary/40 hover:bg-secondary/40 transition-colors cursor-pointer"
                 >
-                  <Search className="h-4 w-4 text-emerald-400 mb-1.5" />
+                  <Search className="h-4 w-4 text-mint mb-1.5" />
                   <span className="font-medium text-xs text-foreground block">Deep Topic Research</span>
                   <span className="text-[10px] text-muted-foreground block font-mono">Automated synthesis</span>
                 </div>
@@ -3557,9 +3557,9 @@ function StudySessionPanel({
 
                     {/* Resume Card (if session in progress) */}
                     {tutorSessionStats.completedActivities > 0 && (
-                      <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/[0.04] p-4 flex items-center justify-between">
+                      <div className="rounded-lg border border-primary/30 bg-primary/[0.04] p-4 flex items-center justify-between">
                         <div>
-                          <div className="flex items-center gap-1.5 text-[10px] font-mono text-emerald-400 font-semibold uppercase tracking-wider">
+                          <div className="flex items-center gap-1.5 text-[10px] font-mono text-primary font-semibold uppercase tracking-wider">
                             <Clock className="h-3 w-3" />
                             <span>In-Progress Session</span>
                           </div>
@@ -3574,7 +3574,7 @@ function StudySessionPanel({
                         <button
                           type="button"
                           onClick={() => handleStartTutorChapter(activeChapterIdx)}
-                          className="flex items-center gap-1 rounded-md bg-emerald-500 px-3.5 py-1.5 text-xs font-semibold text-emerald-950 hover:bg-emerald-400 active:scale-95 transition-all shadow-xs"
+                          className="flex items-center gap-1 rounded-md bg-primary px-3.5 py-1.5 text-xs font-semibold text-primary-foreground hover:opacity-90 active:scale-95 transition-all shadow-xs"
                         >
                           <Play className="h-3 w-3 fill-current" />
                           <span>Resume</span>
@@ -3681,7 +3681,7 @@ function StudySessionPanel({
                               key={idx}
                               className={`h-1.5 w-3 rounded-full transition-colors ${
                                 idx < tutorStepIndex
-                                  ? "bg-emerald-500"
+                                  ? "bg-mint"
                                   : idx === tutorStepIndex
                                   ? "bg-primary animate-pulse"
                                   : "bg-secondary"
@@ -3836,7 +3836,7 @@ function StudySessionPanel({
                                 key={segIdx}
                                 className={`h-1.5 flex-1 rounded-full transition-all duration-300 ${
                                   segIdx < tutorStepIndex || (segIdx === tutorStepIndex && activityEvaluation?.is_correct)
-                                    ? "bg-emerald-500"
+                                    ? "bg-mint"
                                     : segIdx === tutorStepIndex
                                     ? "bg-primary"
                                     : "bg-secondary/80"
@@ -3876,7 +3876,7 @@ function StudySessionPanel({
                                     let btnStyle = "border-border/70 bg-secondary/20 hover:bg-secondary/40 text-foreground";
                                     if (activityEvaluation) {
                                       if (optIdx === (tutorStepData.activity.correct_option ?? 1)) {
-                                        btnStyle = "border-emerald-500/50 bg-emerald-500/10 text-emerald-400 font-semibold";
+                                        btnStyle = "border-mint/50 bg-mint/10 text-mint font-semibold";
                                       } else if (isSelected && !activityEvaluation.is_correct) {
                                         btnStyle = "border-destructive/50 bg-destructive/10 text-destructive";
                                       }
@@ -3901,7 +3901,7 @@ function StudySessionPanel({
                                         </span>
                                         <span className="text-xs leading-relaxed pt-0.5">{opt}</span>
                                         {activityEvaluation && optIdx === (tutorStepData.activity.correct_option ?? 1) && (
-                                          <Check className="h-4 w-4 text-emerald-400 ml-auto shrink-0" />
+                                          <Check className="h-4 w-4 text-mint ml-auto shrink-0" />
                                         )}
                                       </button>
                                     );
@@ -4022,13 +4022,13 @@ function StudySessionPanel({
                                   <div className="space-y-0.5">
                                     <div className="flex items-center gap-1.5">
                                       {activityEvaluation.is_correct ? (
-                                        <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                                        <CheckCircle2 className="h-4 w-4 text-mint" />
                                       ) : (
                                         <AlertCircle className="h-4 w-4 text-destructive" />
                                       )}
                                       <span
                                         className={`text-xs font-semibold ${
-                                          activityEvaluation.is_correct ? "text-emerald-400" : "text-destructive"
+                                          activityEvaluation.is_correct ? "text-mint" : "text-destructive"
                                         }`}
                                       >
                                         {activityEvaluation.is_correct ? "Correct" : "Needs Review"}
@@ -4071,7 +4071,7 @@ function StudySessionPanel({
                 ) : (
                   /* C. SESSION COMPLETED RECAP */
                   <div className="space-y-4 py-8 text-center">
-                    <div className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400">
+                    <div className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-mint/10 border border-mint/30 text-mint">
                       <GraduationCap className="h-6 w-6" />
                     </div>
                     <div className="space-y-1">
@@ -4088,7 +4088,7 @@ function StudySessionPanel({
                       </div>
                       <div>
                         <span className="text-[10px] font-mono uppercase text-muted-foreground">Accuracy</span>
-                        <div className="text-lg font-bold text-emerald-400 mt-0.5">{tutorSessionStats.accuracy || 100}%</div>
+                        <div className="text-lg font-bold text-mint mt-0.5">{tutorSessionStats.accuracy || 100}%</div>
                       </div>
                     </div>
 
@@ -4435,7 +4435,7 @@ function StudySessionPanel({
 
                         {/* BACK */}
                         <div className="absolute inset-0 backface-hidden rotate-y-180 rounded-xl border border-primary/30 bg-card p-5 flex flex-col justify-between shadow-xs">
-                          <span className="text-[10px] font-mono text-emerald-400 font-semibold uppercase tracking-wider bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded self-start">Answer</span>
+                          <span className="text-[10px] font-mono text-mint font-semibold uppercase tracking-wider bg-mint/10 border border-mint/20 px-2 py-0.5 rounded self-start">Answer</span>
                           <div className="my-auto py-1 text-center text-xs font-medium leading-relaxed text-foreground overflow-y-auto max-h-24 scrollbar-none select-text">
                             {currentFlashcard.answer}
                           </div>
@@ -4475,7 +4475,7 @@ function StudySessionPanel({
                             toast.success("Mastered entire active recall deck!");
                           }
                         }}
-                        className={`flex-1 rounded-md border py-2 text-xs font-medium transition-colors outline-none ${flashcardLog[flashcardIdx] === "got" ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-400 font-semibold" : "border-border/70 text-muted-foreground hover:bg-secondary hover:text-foreground"}`}
+                        className={`flex-1 rounded-md border py-2 text-xs font-medium transition-colors outline-none ${flashcardLog[flashcardIdx] === "got" ? "bg-mint/15 border-mint/30 text-mint font-semibold" : "border-border/70 text-muted-foreground hover:bg-secondary hover:text-foreground"}`}
                       >
                         Mastered
                       </button>
@@ -4859,7 +4859,7 @@ function StudySessionPanel({
                             <span
                               className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold border ${
                                 quizEvaluation.percentage >= 80
-                                  ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
+                                  ? "bg-mint/10 text-mint border-mint/30"
                                   : quizEvaluation.percentage >= 50
                                   ? "bg-amber-500/10 text-amber-400 border-amber-500/30"
                                   : "bg-destructive/10 text-destructive border-destructive/30"
@@ -4912,7 +4912,7 @@ function StudySessionPanel({
                             key={res.id || rIdx}
                             className={`rounded-lg border p-4 space-y-3 text-left transition-colors ${
                               isCorrect
-                                ? "border-emerald-500/30 bg-emerald-500/[0.03]"
+                                ? "border-mint/30 bg-mint/[0.03]"
                                 : "border-destructive/30 bg-destructive/[0.03]"
                             }`}
                           >
@@ -4924,7 +4924,7 @@ function StudySessionPanel({
                               <span
                                 className={`inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded border ${
                                   isCorrect
-                                    ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                                    ? "bg-mint/10 text-mint border-mint/20"
                                     : "bg-destructive/10 text-destructive border-destructive/20"
                                 }`}
                               >
@@ -4956,7 +4956,7 @@ function StudySessionPanel({
 
                                 let optionStyle = "border-border/50 bg-card/60 text-muted-foreground/70";
                                 if (isActualCorrect) {
-                                  optionStyle = "border-emerald-500/50 bg-emerald-500/10 text-emerald-400 font-medium";
+                                  optionStyle = "border-mint/50 bg-mint/10 text-mint font-medium";
                                 } else if (isSelected && !isCorrect) {
                                   optionStyle = "border-destructive/50 bg-destructive/10 text-destructive font-medium";
                                 }
@@ -4969,7 +4969,7 @@ function StudySessionPanel({
                                     <span className="font-mono font-bold text-[10px] pt-0.5">{letter}.</span>
                                     <span className="flex-1 leading-relaxed">{opt}</span>
                                     {isActualCorrect && (
-                                      <span className="text-[10px] font-mono text-emerald-400 shrink-0 font-medium">
+                                      <span className="text-[10px] font-mono text-mint shrink-0 font-medium">
                                         ✓ Correct
                                       </span>
                                     )}
