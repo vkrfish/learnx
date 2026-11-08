@@ -42,7 +42,47 @@
 
 :root {
   --radius: 0.625rem;
-  /* Claude Editorial Warm Palette */
+  /* Claude Editorial Light Canvas (White / Warm Cream) */
+  --background: #faf9f5;           /* Claude canvas */
+  --foreground: #141413;           /* Claude ink */
+
+  --card: #ffffff;                 /* Pure crisp card */
+  --card-foreground: #141413;
+
+  --popover: #ffffff;
+  --popover-foreground: #141413;
+
+  --primary: #cc785c;              /* Claude Signature Warm Coral / Terracotta */
+  --primary-foreground: #ffffff;
+
+  --secondary: #f5f0e8;            /* Claude surface-soft */
+  --secondary-foreground: #252523;
+
+  --muted: #f0ebe1;
+  --muted-foreground: #6c6a64;     /* Claude muted */
+
+  --accent: rgba(204, 120, 92, 0.10);
+  --accent-foreground: #a9583e;
+
+  --destructive: #c64545;          /* Claude error red */
+  --destructive-foreground: #ffffff;
+
+  --border: #e6dfd8;               /* Claude light hairline */
+  --input: #e6dfd8;
+  --ring: #cc785c;
+
+  --sticky: #e8a55a;
+  --highlight: rgba(204, 120, 92, 0.15);
+  --mint: #16806a;                 /* High-contrast teal for light */
+  --terracotta: #cc785c;
+
+  --scrollbar-thumb: #d8d2c9;
+  --scrollbar-thumb-hover: #b8b2a8;
+  --bg-radial: rgba(204, 120, 92, 0.08);
+}
+
+.dark {
+  /* Claude Editorial Dark Canvas */
   --background: #181715;           /* Claude surface-dark */
   --foreground: #faf9f5;           /* Claude on-dark cream */
 
@@ -75,20 +115,24 @@
   --highlight: rgba(204, 120, 92, 0.18);
   --mint: #5db8a6;                 /* Claude accent teal */
   --terracotta: #cc785c;
+
+  --scrollbar-thumb: #2e2c28;
+  --scrollbar-thumb-hover: #3d3a35;
+  --bg-radial: rgba(204, 120, 92, 0.12);
 }
 
 @layer base {
   * {
     border-color: var(--color-border);
     scrollbar-width: thin;
-    scrollbar-color: #2e2c28 transparent;
+    scrollbar-color: var(--scrollbar-thumb) transparent;
   }
 
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);
     font-family: var(--font-sans);
-    background-image: radial-gradient(ellipse 90% 50% at 50% -15%, rgba(204, 120, 92, 0.12), transparent 75%);
+    background-image: radial-gradient(ellipse 90% 50% at 50% -15%, var(--bg-radial), transparent 75%);
     background-attachment: fixed;
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
@@ -103,11 +147,11 @@
     background: transparent;
   }
   ::-webkit-scrollbar-thumb {
-    background: #2e2c28;
+    background: var(--scrollbar-thumb);
     border-radius: 9999px;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: #3d3a35;
+    background: var(--scrollbar-thumb-hover);
   }
 }
 
@@ -124,20 +168,27 @@
   }
 
   .glass-panel {
-    background: rgba(31, 30, 27, 0.88);
+    background: rgba(255, 255, 255, 0.85);
     backdrop-filter: blur(14px);
+    border: 1px solid rgba(20, 20, 19, 0.08);
+  }
+  .dark .glass-panel {
+    background: rgba(31, 30, 27, 0.88);
     border: 1px solid rgba(230, 223, 216, 0.08);
   }
 
   .notebook-card {
-    background: #1f1e1b;
-    border: 1px solid #2e2c28;
+    background: var(--color-card);
+    border: 1px solid var(--color-border);
     transition: border-color 0.2s cubic-bezier(0.16, 1, 0.3, 1), transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   }
   .notebook-card:hover {
     border-color: rgba(204, 120, 92, 0.45);
-    box-shadow: 0 8px 28px -4px rgba(0, 0, 0, 0.5), 0 0 15px -2px rgba(204, 120, 92, 0.12);
+    box-shadow: 0 8px 28px -4px rgba(0, 0, 0, 0.15), 0 0 15px -2px rgba(204, 120, 92, 0.12);
     transform: translateY(-2px);
+  }
+  .dark .notebook-card:hover {
+    box-shadow: 0 8px 28px -4px rgba(0, 0, 0, 0.5), 0 0 15px -2px rgba(204, 120, 92, 0.12);
   }
 
   .highlight-gradient {

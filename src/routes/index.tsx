@@ -1,6 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 import { supabase } from "../integrations/supabase/client";
+import { ThemeToggle } from "../components/theme-toggle";
 import {
   FileText,
   Youtube,
@@ -74,7 +75,8 @@ function Nav() {
           </a>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5">
+          <ThemeToggle />
           <a
             href="/signin"
             className="text-xs font-medium text-muted-foreground hover:text-foreground transition-colors px-2 py-1"

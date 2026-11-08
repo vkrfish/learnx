@@ -1,6 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "../integrations/supabase/client";
+import { ThemeToggle } from "../components/theme-toggle";
 
 const isLocal = typeof window !== "undefined" && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1");
 const API_BASE_URL = (
@@ -1065,6 +1066,9 @@ export default function DashboardPage() {
                 <Flame className="h-3.5 w-3.5 text-primary" />
                 <span>3-day streak</span>
               </div>
+
+              {/* Theme Toggle (Dark / Light White Mode) */}
+              <ThemeToggle />
 
               {/* User Dropdown */}
               <div className="relative">
@@ -2627,7 +2631,8 @@ function StudySessionPanel({
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5">
+          <ThemeToggle />
           {useRealBackend && (
             <span className="inline-flex items-center gap-1.5 text-[11px] font-mono text-primary px-2.5 py-1 rounded-md bg-primary/10 border border-primary/20 select-none">
               <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />

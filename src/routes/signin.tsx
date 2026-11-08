@@ -3,6 +3,7 @@ import { ChevronLeft, Loader2, Sparkles, MessageSquare, ShieldCheck } from "luci
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { supabase } from "../integrations/supabase/client";
+import { ThemeToggle } from "../components/theme-toggle";
 
 export const Route = createFileRoute("/signin")({
   head: () => ({
@@ -158,7 +159,10 @@ function SignInPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background text-foreground selection:bg-primary/20 flex items-center justify-center p-4 sm:p-6">
+    <div className="min-h-screen bg-background text-foreground selection:bg-primary/20 flex items-center justify-center p-4 sm:p-6 relative">
+      <div className="absolute top-4 right-4 z-20">
+        <ThemeToggle />
+      </div>
       <div className="w-full max-w-[960px] grid grid-cols-1 md:grid-cols-2 rounded-xl border border-border bg-card overflow-hidden shadow-2xl relative">
         {/* Left Column: Studio Insights & Value Preview */}
         <div className="relative hidden md:flex flex-col justify-between p-10 bg-secondary/30 border-r border-border overflow-hidden">
