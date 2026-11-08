@@ -1474,6 +1474,34 @@ function StudySessionPanel({
   const [workspaceExpanded, setWorkspaceExpanded] = useState(false);
   const [studioExpanded, setStudioExpanded] = useState(false);
 
+  // Responsive compact rail states when user resizes columns small
+  const sourcesRef = useRef<HTMLDivElement>(null);
+  const studioRef = useRef<HTMLDivElement>(null);
+  const [isSourcesCompact, setIsSourcesCompact] = useState(false);
+  const [isStudioCompact, setIsStudioCompact] = useState(false);
+
+  useEffect(() => {
+    if (!sourcesRef.current) return;
+    const obs = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        setIsSourcesCompact(entry.contentRect.width < 180);
+      }
+    });
+    obs.observe(sourcesRef.current);
+    return () => obs.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (!studioRef.current) return;
+    const obs = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        setIsStudioCompact(entry.contentRect.width < 220);
+      }
+    });
+    obs.observe(studioRef.current);
+    return () => obs.disconnect();
+  }, []);
+
   // -------------------------------------------------------------
   // TUTOR MODE WORKFLOW STATES
   // -------------------------------------------------------------
@@ -2669,9 +2697,9 @@ function StudySessionPanel({
 
       {/* 2. ADJUSTABLE & EXPANDABLE THREE-PANEL SYSTEM (react-resizable-panels) */}
       <div className="flex flex-1 overflow-hidden relative">
-        {/* Collapsed Left Sources Tab */}
+        {/* Collapsed Left Sources Dock (Icon/Logo Rail) */}
         {sourcesCollapsed && (
-          <div className="flex flex-col items-center py-3 px-1.5 border-r border-border/60 bg-card/60 shrink-0 z-10 select-none">
+          <div className="flex flex-col items-center py-3 px-1.5 border-r border-border/60 bg-card/60 shrink-0 z-10 select-none gap-2">
             <button
               onClick={() => setSourcesCollapsed(false)}
               className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"
@@ -2679,9 +2707,55 @@ function StudySessionPanel({
             >
               <PanelLeftOpen className="h-4 w-4" />
             </button>
-            <div className="[writing-mode:vertical-lr] rotate-180 text-[11px] font-mono uppercase tracking-wider text-muted-foreground mt-4 select-none flex items-center gap-1">
-              <span>Sources</span>
-              <span className="text-primary font-bold">({sources.length})</span>
+            <span className="text-[10px] font-mono font-bold text-primary">
+              {sources.length}
+            </span>
+            <div className="h-px w-5 bg-border/60 my-0.5" />
+            <button
+              type="button"
+              onClick={() => setActiveInputMode("files")}
+              className="h-8 w-8 rounded-lg bg-primary/10 border border-primary/20 text-primary flex items-center justify-center hover:bg-primary hover:text-primary-foreground transition-all shadow-xs"
+              title="Add sources"
+            >
+              <Plus className="h-4 w-4" />
+            </button>
+            <div className="flex flex-col items-center gap-1.5 pt-1 overflow-y-auto scrollbar-none max-h-[calc(100vh-14rem)]">
+              {sources.map((src) => {
+                const isSelected = selectedSourceIds.includes(src.id);
+                return (
+                  <button
+                    key={src.id}
+                    type="button"
+                    onClick={() => {
+                      setSourcesCollapsed(false);
+                      setActiveSourcePreviewId(src.id);
+                      setPdfPageNum(null);
+                      setFileViewerExpanded(true);
+                    }}
+                    className={`relative h-8 w-8 rounded-lg flex items-center justify-center border transition-all ${
+                      isSelected
+                        ? "border-border/80 bg-secondary/80 text-foreground"
+                        : "border-transparent text-muted-foreground hover:bg-secondary/40"
+                    }`}
+                    title={`${src.title} (${src.kind.toUpperCase()})`}
+                  >
+                    {src.kind === "pdf" ? (
+                      <FileText className="h-4 w-4 text-red-400" />
+                    ) : src.kind === "youtube" ? (
+                      <Youtube className="h-4 w-4 text-red-500" />
+                    ) : src.kind === "website" ? (
+                      <Globe className="h-4 w-4 text-blue-400" />
+                    ) : src.kind === "research" ? (
+                      <Search className="h-4 w-4 text-mint" />
+                    ) : (
+                      <Type className="h-4 w-4 text-purple-400" />
+                    )}
+                    {isSelected && (
+                      <span className="absolute -top-0.5 -right-0.5 h-1.5 w-1.5 rounded-full bg-primary" />
+                    )}
+                  </button>
+                );
+              })}
             </div>
           </div>
         )}
@@ -2691,12 +2765,85 @@ function StudySessionPanel({
           {!sourcesCollapsed && (
             <>
               <ResizablePanel
-                defaultSize={fileViewerExpanded ? 60 : 25}
-                minSize={16}
-                maxSize={80}
+                defaultSize={fileViewerExpanded ? 55 : 22}
+                minSize={4}
+                maxSize={75}
                 className="flex flex-col border-r border-border/60 bg-card/40 overflow-hidden"
               >
-                {activeSourcePreviewId && previewSource ? (
+                <div ref={sourcesRef} className="flex flex-col h-full overflow-hidden">
+                  {isSourcesCompact ? (
+                    /* COMPACT SOURCES RAIL (Visible Logos / Icons When Row is Small) */
+                    <div className="flex flex-col items-center py-3 px-1.5 h-full bg-card/60 select-none overflow-y-auto scrollbar-none gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFileViewerExpanded(false);
+                          setIsSourcesCompact(false);
+                        }}
+                        className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"
+                        title="Expand sources panel"
+                      >
+                        <PanelLeftOpen className="h-4 w-4" />
+                      </button>
+
+                      <span className="text-[10px] font-mono text-primary font-bold">
+                        {sources.length}
+                      </span>
+
+                      <div className="h-px w-5 bg-border/60 my-0.5" />
+
+                      {/* + Add Source Icon Button */}
+                      <button
+                        type="button"
+                        onClick={() => setActiveInputMode("files")}
+                        className="h-8 w-8 rounded-lg bg-primary/10 border border-primary/20 text-primary flex items-center justify-center hover:bg-primary hover:text-primary-foreground transition-all shadow-xs"
+                        title="Add sources"
+                      >
+                        <Plus className="h-4 w-4" />
+                      </button>
+
+                      {/* List of Source Logos / Icons */}
+                      <div className="flex flex-col items-center gap-1.5 pt-1 w-full overflow-y-auto scrollbar-none">
+                        {sources.map((src) => {
+                          const isSelected = selectedSourceIds.includes(src.id);
+                          return (
+                            <button
+                              key={src.id}
+                              type="button"
+                              onClick={() => {
+                                setActiveSourcePreviewId(src.id);
+                                setPdfPageNum(null);
+                                setFileViewerExpanded(true);
+                              }}
+                              className={`relative h-8 w-8 rounded-lg flex items-center justify-center border transition-all ${
+                                activeSourcePreviewId === src.id
+                                  ? "border-primary bg-primary/15 text-primary shadow-xs"
+                                  : isSelected
+                                  ? "border-border/80 bg-secondary/80 text-foreground hover:border-primary/40"
+                                  : "border-transparent text-muted-foreground hover:bg-secondary/40"
+                              }`}
+                              title={`${src.title} (${src.kind.toUpperCase()})`}
+                            >
+                              {src.kind === "pdf" ? (
+                                <FileText className="h-4 w-4 text-red-400" />
+                              ) : src.kind === "youtube" ? (
+                                <Youtube className="h-4 w-4 text-red-500" />
+                              ) : src.kind === "website" ? (
+                                <Globe className="h-4 w-4 text-blue-400" />
+                              ) : src.kind === "research" ? (
+                                <Search className="h-4 w-4 text-mint" />
+                              ) : (
+                                <Type className="h-4 w-4 text-purple-400" />
+                              )}
+                              {isSelected && (
+                                <span className="absolute -top-0.5 -right-0.5 h-1.5 w-1.5 rounded-full bg-primary" />
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ) : activeSourcePreviewId && previewSource ? (
                   /* SOURCE PREVIEW MODE (SLIDES OVER THE CHECKLIST) */
                   <div className="flex flex-col h-full overflow-hidden">
                     {/* Preview controls header */}
@@ -3128,6 +3275,7 @@ function StudySessionPanel({
               </div>
             </div>
           )}
+                </div>
               </ResizablePanel>
               <ResizableHandle withHandle />
             </>
@@ -3135,7 +3283,7 @@ function StudySessionPanel({
 
           {/* PANEL 2: CENTER WORKSPACE (GROUNDED CHAT & REASONING) */}
           <ResizablePanel
-            defaultSize={workspaceExpanded ? 75 : (fileViewerExpanded || studioExpanded ? 35 : 45)}
+            defaultSize={workspaceExpanded ? 70 : (fileViewerExpanded || studioExpanded ? 30 : 53)}
             minSize={25}
             className="flex flex-col bg-background border-r border-border/60 overflow-hidden relative"
           >
@@ -3491,16 +3639,161 @@ function StudySessionPanel({
         </ResizablePanel>
         <ResizableHandle withHandle />
 
-        {/* PANEL 3: RIGHT PANEL - NOTEBOOKLM STUDIO */}
+        {/* PANEL 3: RIGHT PANEL - STUDIO HUB */}
         {!studioCollapsed && (
           <ResizablePanel
-            defaultSize={studioExpanded ? 65 : (fileViewerExpanded || workspaceExpanded ? 25 : 30)}
-            minSize={20}
+            defaultSize={studioExpanded ? 55 : (fileViewerExpanded || workspaceExpanded ? 20 : 25)}
+            minSize={4}
             maxSize={75}
             className="flex flex-col bg-background overflow-hidden relative border-l border-border/60"
           >
-            {/* STUDIO HEADER */}
-            <div className="flex items-center justify-between border-b border-border/60 bg-muted/10 px-4 py-2.5 shrink-0 select-none">
+            <div ref={studioRef} className="flex flex-col h-full overflow-hidden">
+              {isStudioCompact ? (
+                /* COMPACT STUDIO RAIL (Visible Logos / Icons When Row is Small) */
+                <div className="flex flex-col items-center py-3 px-1.5 h-full bg-card/60 select-none overflow-y-auto scrollbar-none gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStudioExpanded(false);
+                      setIsStudioCompact(false);
+                    }}
+                    className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"
+                    title="Expand Studio panel"
+                  >
+                    <PanelRightOpen className="h-4 w-4" />
+                  </button>
+
+                  <Sparkles className="h-3.5 w-3.5 text-primary" />
+
+                  <div className="h-px w-5 bg-border/60 my-0.5" />
+
+                  {/* Feature logos */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStudyMode("notebook");
+                      setActiveTab("podcast");
+                      setShowRightWelcome(false);
+                      setIsStudioCompact(false);
+                    }}
+                    className={`h-9 w-9 rounded-xl flex items-center justify-center transition-all ${
+                      activeTab === "podcast" && studyMode === "notebook"
+                        ? "bg-blue-500 text-white shadow-xs scale-105"
+                        : "bg-blue-500/10 text-blue-500 dark:bg-blue-400/15 dark:text-blue-400 hover:scale-105 border border-blue-500/20"
+                    }`}
+                    title="Audio Overview (Podcast)"
+                  >
+                    <Headphones className="h-4 w-4" />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStudyMode("notebook");
+                      setActiveTab("briefing");
+                      setShowRightWelcome(false);
+                      setIsStudioCompact(false);
+                    }}
+                    className={`h-9 w-9 rounded-xl flex items-center justify-center transition-all ${
+                      activeTab === "briefing" && studyMode === "notebook"
+                        ? "bg-rose-500 text-white shadow-xs scale-105"
+                        : "bg-rose-500/10 text-rose-500 dark:bg-rose-400/15 dark:text-rose-400 hover:scale-105 border border-rose-500/20"
+                    }`}
+                    title="Briefing Document"
+                  >
+                    <FileStack className="h-4 w-4" />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStudyMode("notebook");
+                      setActiveTab("flashcards");
+                      setShowRightWelcome(false);
+                      setIsStudioCompact(false);
+                    }}
+                    className={`h-9 w-9 rounded-xl flex items-center justify-center transition-all ${
+                      activeTab === "flashcards" && studyMode === "notebook"
+                        ? "bg-amber-500 text-white shadow-xs scale-105"
+                        : "bg-amber-500/10 text-amber-500 dark:bg-amber-400/15 dark:text-amber-400 hover:scale-105 border border-amber-500/20"
+                    }`}
+                    title="Flashcards"
+                  >
+                    <Sparkles className="h-4 w-4" />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStudyMode("notebook");
+                      setActiveTab("quiz");
+                      setShowRightWelcome(false);
+                      setIsStudioCompact(false);
+                    }}
+                    className={`h-9 w-9 rounded-xl flex items-center justify-center transition-all ${
+                      activeTab === "quiz" && studyMode === "notebook"
+                        ? "bg-sky-500 text-white shadow-xs scale-105"
+                        : "bg-sky-500/10 text-sky-500 dark:bg-sky-400/15 dark:text-sky-400 hover:scale-105 border border-sky-500/20"
+                    }`}
+                    title="Practice Quiz"
+                  >
+                    <HelpCircle className="h-4 w-4" />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStudyMode("notebook");
+                      setActiveTab("notes");
+                      setShowRightWelcome(false);
+                      setIsStudioCompact(false);
+                    }}
+                    className={`h-9 w-9 rounded-xl flex items-center justify-center transition-all ${
+                      activeTab === "notes" && studyMode === "notebook"
+                        ? "bg-emerald-500 text-white shadow-xs scale-105"
+                        : "bg-emerald-500/10 text-emerald-500 dark:bg-emerald-400/15 dark:text-emerald-400 hover:scale-105 border border-emerald-500/20"
+                    }`}
+                    title="Study Notes & Writing Assistant"
+                  >
+                    <Edit2 className="h-4 w-4" />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStudyMode("tutor");
+                      if (tutorOutline.length === 0) handleLoadTutorOutline();
+                      setIsStudioCompact(false);
+                    }}
+                    className={`h-9 w-9 rounded-xl flex items-center justify-center transition-all ${
+                      studyMode === "tutor"
+                        ? "bg-primary text-primary-foreground shadow-xs scale-105"
+                        : "bg-primary/10 text-primary hover:scale-105 border border-primary/20"
+                    }`}
+                    title="Socratic Tutor Mode"
+                  >
+                    <GraduationCap className="h-4 w-4" />
+                  </button>
+
+                  <div className="h-px w-5 bg-border/60 my-0.5" />
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStudyMode("notebook");
+                      setActiveTab("notes");
+                      setIsStudioCompact(false);
+                    }}
+                    className="h-8 w-8 rounded-full border border-dashed border-border/80 text-muted-foreground flex items-center justify-center hover:border-primary hover:text-primary transition-all"
+                    title="Add Note"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              ) : (
+                <>
+                {/* STUDIO HEADER */}
+                <div className="flex items-center justify-between border-b border-border/60 bg-muted/10 px-4 py-2.5 shrink-0 select-none">
               {activeTab === "studio" && studyMode === "notebook" ? (
                 <div className="flex items-center gap-2">
                   <Sparkles className="h-4 w-4 text-primary" />
@@ -5336,13 +5629,16 @@ function StudySessionPanel({
             )}
 
           </div>
+          </>
+          )}
+          </div>
         </ResizablePanel>
       )}
       </ResizablePanelGroup>
 
-      {/* COLLAPSED STUDIO DOCK (Right Edge) */}
+      {/* COLLAPSED STUDIO DOCK (Right Edge with visible feature logos) */}
       {studioCollapsed && (
-        <div className="flex flex-col items-center py-3 px-1.5 border-l border-border/60 bg-card/60 shrink-0 z-10 select-none">
+        <div className="flex flex-col items-center py-3 px-1.5 border-l border-border/60 bg-card/60 shrink-0 z-10 select-none gap-2.5">
           <button
             type="button"
             onClick={() => setStudioCollapsed(false)}
@@ -5351,13 +5647,94 @@ function StudySessionPanel({
           >
             <PanelRightOpen className="h-4 w-4" />
           </button>
-          <div
-            onClick={() => setStudioCollapsed(false)}
-            className="mt-6 flex items-center gap-1.5 [writing-mode:vertical-rl] rotate-180 text-xs font-medium text-muted-foreground hover:text-foreground cursor-pointer tracking-wider"
+          <Sparkles className="h-3.5 w-3.5 text-primary" />
+          <div className="h-px w-5 bg-border/60 my-0.5" />
+          {/* Feature logos */}
+          <button
+            type="button"
+            onClick={() => {
+              setStudioCollapsed(false);
+              setStudyMode("notebook");
+              setActiveTab("podcast");
+            }}
+            className="h-8 w-8 rounded-lg bg-blue-500/10 text-blue-500 flex items-center justify-center hover:scale-105 border border-blue-500/20 transition-all shadow-xs"
+            title="Audio Overview"
           >
-            <Sparkles className="h-3 w-3 text-primary inline" />
-            <span>Studio</span>
-          </div>
+            <Headphones className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setStudioCollapsed(false);
+              setStudyMode("notebook");
+              setActiveTab("briefing");
+            }}
+            className="h-8 w-8 rounded-lg bg-rose-500/10 text-rose-500 flex items-center justify-center hover:scale-105 border border-rose-500/20 transition-all shadow-xs"
+            title="Briefing Document"
+          >
+            <FileStack className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setStudioCollapsed(false);
+              setStudyMode("notebook");
+              setActiveTab("flashcards");
+            }}
+            className="h-8 w-8 rounded-lg bg-amber-500/10 text-amber-500 flex items-center justify-center hover:scale-105 border border-amber-500/20 transition-all shadow-xs"
+            title="Flashcards"
+          >
+            <Sparkles className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setStudioCollapsed(false);
+              setStudyMode("notebook");
+              setActiveTab("quiz");
+            }}
+            className="h-8 w-8 rounded-lg bg-sky-500/10 text-sky-500 flex items-center justify-center hover:scale-105 border border-sky-500/20 transition-all shadow-xs"
+            title="Practice Quiz"
+          >
+            <HelpCircle className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setStudioCollapsed(false);
+              setStudyMode("notebook");
+              setActiveTab("notes");
+            }}
+            className="h-8 w-8 rounded-lg bg-emerald-500/10 text-emerald-500 flex items-center justify-center hover:scale-105 border border-emerald-500/20 transition-all shadow-xs"
+            title="Study Notes"
+          >
+            <Edit2 className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setStudioCollapsed(false);
+              setStudyMode("tutor");
+              if (tutorOutline.length === 0) handleLoadTutorOutline();
+            }}
+            className="h-8 w-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center hover:scale-105 border border-primary/20 transition-all shadow-xs"
+            title="Socratic Tutor Mode"
+          >
+            <GraduationCap className="h-4 w-4" />
+          </button>
+          <div className="h-px w-5 bg-border/60 my-0.5" />
+          <button
+            type="button"
+            onClick={() => {
+              setStudioCollapsed(false);
+              setStudyMode("notebook");
+              setActiveTab("notes");
+            }}
+            className="h-7 w-7 rounded-full border border-dashed border-border text-muted-foreground flex items-center justify-center hover:border-primary hover:text-primary transition-all"
+            title="Add Note"
+          >
+            <Plus className="h-3 w-3" />
+          </button>
         </div>
       )}
 
