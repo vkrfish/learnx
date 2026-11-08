@@ -35,6 +35,8 @@ function NotFoundComponent() {
 function ErrorComponent({ error, reset }: { error: unknown; reset: () => void }) {
   console.error(error);
   const router = useRouter();
+  const errorMessage =
+    error instanceof Error ? error.message : typeof error === "string" ? error : JSON.stringify(error);
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
@@ -45,6 +47,11 @@ function ErrorComponent({ error, reset }: { error: unknown; reset: () => void })
         <p className="mt-2 text-sm text-muted-foreground">
           Something went wrong on our end. You can try refreshing or head back home.
         </p>
+        {errorMessage && (
+          <div className="mt-4 p-3 rounded-md bg-destructive/10 border border-destructive/20 text-destructive text-xs font-mono text-left break-all max-h-48 overflow-auto">
+            {errorMessage}
+          </div>
+        )}
         <div className="mt-6 flex flex-wrap justify-center gap-2">
           <button
             onClick={() => {
@@ -97,6 +104,11 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         href: "https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap",
       },
     ],
+    scripts: [
+      {
+        children: `try { var s = localStorage.getItem('learnx_theme'); if (s === 'light') { document.documentElement.classList.remove('dark'); document.documentElement.classList.add('light'); } } catch (e) {}`,
+      },
+    ],
   }),
   shellComponent: RootShell,
   component: RootComponent,
@@ -108,25 +120,6 @@ function RootShell({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className="dark">
       <head>
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `
-              (function() {
-                try {
-                  var saved = localStorage.getItem('learnx_theme');
-                  var isDark = saved ? saved === 'dark' : true;
-                  if (isDark) {
-                    document.documentElement.classList.add('dark');
-                    document.documentElement.classList.remove('light');
-                  } else {
-                    document.documentElement.classList.remove('dark');
-                    document.documentElement.classList.add('light');
-                  }
-                } catch (e) {}
-              })();
-            `,
-          }}
-        />
         <HeadContent />
       </head>
       <body>

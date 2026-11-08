@@ -1359,6 +1359,7 @@ interface TutorActivity {
   prompt?: string;
   hint?: string;
   options?: string[];
+  correct_option?: number;
   front?: string;
   back?: string;
   sentence_before?: string;
@@ -4368,7 +4369,7 @@ function StudySessionPanel({
                     </button>
                   </div>
 
-                  {briefingDoc && (
+                  {notebook.briefingDoc && (
                     <div
                       onClick={() => setActiveTab("briefing")}
                       className="flex items-center justify-between rounded-xl border border-border/70 bg-card/40 hover:bg-secondary/50 p-3 cursor-pointer transition-colors"
