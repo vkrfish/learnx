@@ -39,3 +39,4 @@ Multi-source study sessions: students upload full slide decks, textbooks, and re
 2. Active Retrieval Over Passive Consumption: Force the learner's brain to retrieve knowledge via flashcards, questions, and Socratic challenges rather than passive rereading.
 3. Fluid Multi-Format Ingestion: Handle textbooks, slide presentations, Word documents, and recorded lectures without requiring manual format conversion.
 4. Editorial Restraint and Craft: Honor readability, high typography contrast, and uncluttered layout; avoid AI slop, neon gradients, and nested card clutter.
+
