@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { supabase } from "../integrations/supabase/client";
 import { ThemeToggle } from "../components/theme-toggle";
 
@@ -1570,6 +1570,13 @@ function StudySessionPanel({
   const [studyMode, setStudyMode] = useState<"notebook" | "tutor">("notebook");
   const [authToken, setAuthToken] = useState<string>(() => session?.access_token || "");
 
+  // Clean deduplicated view of sources across active workspace
+  const displaySources = useMemo(() => deduplicateSources(sources), [sources]);
+  const activeDisplayCount = useMemo(
+    () => displaySources.filter((s) => selectedSourceIds.includes(s.id)).length,
+    [displaySources, selectedSourceIds]
+  );
+
   useEffect(() => {
     if (session?.access_token) {
       setAuthToken(session.access_token);
@@ -2003,6 +2010,7 @@ function StudySessionPanel({
           body: JSON.stringify({
             question: query,
             selectedSourceIds: uniqueSourceIds,
+            chat_history: notebook.chatHistory || [],
             context: activeContext,
             stream: true,
           }),
@@ -2906,7 +2914,7 @@ function StudySessionPanel({
               {notebook.title}
             </h1>
             <p className="text-[11px] text-muted-foreground truncate font-mono">
-              {selectedSourceIds.length} of {sources.length} sources active
+              {activeDisplayCount} of {displaySources.length} source{displaySources.length !== 1 ? "s" : ""} active
             </p>
           </div>
         </div>
@@ -3347,7 +3355,7 @@ function StudySessionPanel({
             /* SOURCES LIST CHECKLIST VIEW */
             <div className="flex flex-col h-full overflow-hidden">
               <div className="flex items-center justify-between border-b border-border/60 bg-muted/20 px-4 py-2.5 shrink-0 select-none">
-                <span className="font-semibold text-xs tracking-tight text-foreground">Sources ({sources.length})</span>
+                <span className="font-semibold text-xs tracking-tight text-foreground">Sources ({displaySources.length})</span>
                 
                 <div className="flex items-center gap-1">
                   <button
@@ -3513,13 +3521,13 @@ function StudySessionPanel({
                   </div>
                 ))}
 
-                {sources.length === 0 && uploadingSources.length === 0 ? (
+                {displaySources.length === 0 && uploadingSources.length === 0 ? (
                   <div className="flex flex-col items-center justify-center h-48 opacity-40 text-center my-6">
                     <FileStack className="h-8 w-8 mb-2" />
                     <p className="text-xs text-muted-foreground">No sources added yet.</p>
                   </div>
                 ) : (
-                  sources.map((src) => {
+                  displaySources.map((src) => {
                     const isActive = selectedSourceIds.includes(src.id);
                     return (
                       <div
@@ -4807,7 +4815,7 @@ function StudySessionPanel({
                 <div className="flex items-center justify-between text-[11px] text-muted-foreground border-b border-border/50 pb-2">
                   <span>AI Synthesis & Study Tools</span>
                   <span className="font-mono text-primary font-medium">
-                    {selectedSourceIds.length > 0 ? selectedSourceIds.length : sources.length} source{sources.length !== 1 ? "s" : ""} active
+                    {activeDisplayCount > 0 ? activeDisplayCount : displaySources.length} source{(activeDisplayCount > 0 ? activeDisplayCount : displaySources.length) !== 1 ? "s" : ""} active
                   </span>
                 </div>
 
@@ -5354,9 +5362,9 @@ function StudySessionPanel({
                         className="w-full rounded-md border border-border/70 bg-card px-3 py-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                       >
                         <option value="all">
-                          All Checked Sources ({selectedSourceIds.length > 0 ? selectedSourceIds.length : sources.length} materials)
+                          All Checked Sources ({activeDisplayCount > 0 ? activeDisplayCount : displaySources.length} materials)
                         </option>
-                        {sources.map((s) => (
+                        {displaySources.map((s) => (
                           <option key={s.id} value={s.id}>
                             {s.title} ({s.kind.toUpperCase()})
                           </option>
@@ -5589,9 +5597,9 @@ function StudySessionPanel({
                         className="w-full rounded-md border border-border/70 bg-card px-3 py-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                       >
                         <option value="all">
-                          All Checked Sources ({selectedSourceIds.length > 0 ? selectedSourceIds.length : sources.length} materials)
+                          All Checked Sources ({activeDisplayCount > 0 ? activeDisplayCount : displaySources.length} materials)
                         </option>
-                        {sources.map((s) => (
+                        {displaySources.map((s) => (
                           <option key={s.id} value={s.id}>
                             {s.title} ({s.kind.toUpperCase()})
                           </option>

@@ -1517,19 +1517,66 @@ class ChatPayload(BaseModel):
     context: str = ""
     stream: bool = False
 
+AFFIRMATIVE_CONFIRMATIONS = {
+    "yes", "yeah", "yep", "sure", "ok", "okay", "go ahead", "please do",
+    "tell me more", "continue", "proceed", "yes please", "do that", "absolutely",
+    "definitely", "why not", "of course", "sounds good", "alright", "yup", "yess", "yes!",
+    "details", "show me", "more details", "go for it"
+}
+
 @traceable(run_type="chain", name="RAG Query Condenser")
 def condense_rag_query(question: str, chat_history: list) -> str:
+    cleaned_q = re.sub(r'[^a-zA-Z0-9\s]', '', question.strip().lower())
+
+    # Find the last assistant message if any
+    last_assistant_msg = ""
+    for m in reversed(chat_history):
+        role = getattr(m, 'role', '') if hasattr(m, 'role') else (m.get('role', '') if isinstance(m, dict) else '')
+        content = getattr(m, 'content', '') if hasattr(m, 'content') else (m.get('content', '') if isinstance(m, dict) else str(m))
+        if role in ('assistant', 'model', 'bot') and content.strip():
+            last_assistant_msg = content.strip()
+            break
+
+    is_affirmative = (
+        cleaned_q in AFFIRMATIVE_CONFIRMATIONS
+        or any(cleaned_q.startswith(prefix) for prefix in ("yes ", "sure ", "ok ", "continue ", "tell me more"))
+        or (len(cleaned_q.split()) <= 3 and any(w in cleaned_q.split() for w in ("yes", "sure", "ok", "please", "more", "continue")))
+    )
+
     history_text = "\n".join([
         f"{'User' if getattr(m, 'role', '') == 'user' or (isinstance(m, dict) and m.get('role') == 'user') else 'Assistant'}: {getattr(m, 'content', '') if hasattr(m, 'content') else (m.get('content', '') if isinstance(m, dict) else str(m))}"
-        for m in chat_history[-5:]
+        for m in chat_history[-6:]
     ])
-    condensation_prompt = f"""Given the conversation history and a follow-up question, rewrite the follow-up question to be a single standalone search query containing all key context. Do not answer it.
+
+    condensation_prompt = f"""Given the conversation history and a follow-up user message, rewrite the follow-up message into a complete, standalone RAG search query.
+CRITICAL RULES:
+1. If the user input is an affirmative confirmation (like 'yes', 'sure', 'go ahead', 'tell me more', 'ok', 'please do'), inspect the previous Assistant message and extract the exact topics, concepts, or breakdown offered (e.g. candidate education, technical skills, projects, key chapters, definitions). Formulate a search query requesting those specific topics.
+2. The standalone query MUST contain the specific entities, document topics, or concept names from the conversation.
+3. NEVER return a generic word like 'yes', 'sure', or 'details'. Always include the domain subject matter.
+4. Return ONLY the standalone search query string without any quotes, preamble, or answering the question.
+
 Conversation History:
 {history_text}
-Follow-up Question: {question}
+
+Follow-up User Message: {question}
 Standalone Search Query:"""
-    condensed = call_llm(condensation_prompt, timeout=10).strip()
-    return re.sub(r'^["\'`]+|["\'`]+$', '', condensed).strip()
+
+    try:
+        condensed = call_llm(condensation_prompt, timeout=10).strip()
+        condensed = re.sub(r'^["\'`]+|["\'`]+$', '', condensed).strip()
+        if condensed and len(condensed) > 3 and condensed.lower() not in AFFIRMATIVE_CONFIRMATIONS:
+            return condensed
+    except Exception as e:
+        print(f"[WARNING] LLM query condensation failed: {e}")
+
+    # Fallback heuristic if LLM timed out or returned something too short / affirmative
+    if is_affirmative and last_assistant_msg:
+        match = re.search(r'(?:such as|like|including|explore|about|regarding)\s+([^.?!]+)', last_assistant_msg, re.IGNORECASE)
+        if match:
+            return f"Detailed breakdown of {match.group(1).strip()} from document"
+        return f"Comprehensive details and analysis of topics mentioned in: {last_assistant_msg[:120]}"
+
+    return question
 
 @traceable(run_type="retriever", name="pgvector Cosine Retrieval")
 def retrieve_pgvector_chunks(cur, query_embedding: list, item_ids: list, limit: int = 8):
@@ -1690,15 +1737,28 @@ The user is studying {kind_label}.
 PRIMARY OBJECTIVES:
 1. Provide extremely clear, beautifully structured, and comprehensive answers.
 2. Directly answer the user's question using the provided source context. When multiple resources (such as books, documents, and YouTube video lectures) are selected, synthesize information across ALL active materials seamlessly.
-3. If the user asks about a specific resource or topic (e.g. YouTube video, Rich Dad Poor Dad, chapters, or documents), locate that information in the retrieved context and answer it thoroughly.
-4. IMPORTANT CITATION RULE: Whenever citing facts from the source, append an inline citation in the format `[Page X]` for documents, `[Slide X]` for presentations, or `[MM:SS]` for videos (e.g., "The concept is defined as... [Page 2]" or "[01:30]").
-5. If the exact answer isn't fully covered in the context, seamlessly supplement using your vast AI knowledge without outputting meta-commentary disclaimers about whether a text snippet was partially retrieved; simply provide the best, most comprehensive grounded answer.
-6. End with a friendly, conversational follow-up inviting deeper exploration."""
+3. CONVERSATIONAL CONTINUITY & AFFIRMATIVE FOLLOW-UPS (STRICT RULE):
+   - When the user responds with an affirmative confirmation (such as "yes", "sure", "go ahead", "tell me more", "ok", "please do", "continue") to an offer, question, or list of topics proposed in the previous conversation:
+     * NEVER respond with "It looks like your response was just 'yes'" or ask what they want again!
+     * DO NOT deflect or pause.
+     * IMMEDIATELY deliver the full, thorough, detailed breakdown of the topics, details, or questions offered in the preceding turn (e.g. candidate education, technical skills, projects, architectures, next chapters, or deeper analysis).
+     * Provide a well-formatted, complete response with bullet points, bold section headers, and clear structure.
+4. IMPORTANT CITATION RULE: Whenever citing facts from the source, append an inline citation in the format `[Page X]` for documents, `[Slide X]` for presentations, or `[MM:SS]` for videos (e.g., "[Page 1]").
+5. End with a friendly, conversational follow-up inviting further exploration once the breakdown is delivered."""
+
+        if search_query != payload.question:
+            prompt_instruction = f"""User Follow-up Input: "{payload.question}"
+Resolved User Request: {search_query}
+Action: The user responded affirmatively to your previous suggestion. Immediately deliver the full, comprehensive detailed breakdown covering the requested topics ({search_query}) grounded directly in the source context."""
+        else:
+            prompt_instruction = f"Question: {payload.question}"
 
         user_prompt = f"""Retrieved Source Context:
 {context}
 
-Question: {payload.question}"""
+{prompt_instruction}"""
+
+        resolved_topic = search_query if search_query != payload.question else payload.question
 
         if payload.stream:
             if conn:
@@ -1721,14 +1781,14 @@ Question: {payload.question}"""
                                 yield f"data: {json.dumps({'token': chunk, 'text': chunk})}\n\n"
                         except Exception as ai_e:
                             print(f"[WARNING] Remote AI stream failed: {ai_e}. Using synthesized fallback.")
-                            fallback_reply = f"Based on your {kind_label}, here is the information regarding **{payload.question}**:\n\n"
+                            fallback_reply = f"Based on your {kind_label}, here is the information regarding **{resolved_topic}**:\n\n"
                             if matches:
                                 fallback_reply += f"> {matches[0][0][:400]}...\n\n"
                                 fallback_reply += "I've extracted this from your study resource. Would you like a deeper breakdown of any specific concept?"
                             elif context and "No specific content" not in context:
                                 fallback_reply += f"{context[:600]}\n\nFeel free to ask follow-up questions to explore further!"
                             else:
-                                fallback_reply += f"I analyzed your study materials for '{payload.question}'. Upload additional notes or select active sources to see page-specific citations!"
+                                fallback_reply += f"I analyzed your study materials for '{resolved_topic}'. Upload additional notes or select active sources to see page-specific citations!"
 
                             words = fallback_reply.split(" ")
                             for idx, w in enumerate(words):
@@ -1761,14 +1821,14 @@ Question: {payload.question}"""
                 )
             except Exception as ai_e:
                 print(f"[WARNING] Remote AI chat failed: {ai_e}. Using synthesized fallback.")
-                reply = f"Based on your {kind_label}, here is the information regarding **{payload.question}**:\n\n"
+                reply = f"Based on your {kind_label}, here is the information regarding **{resolved_topic}**:\n\n"
                 if matches:
                     reply += f"> {matches[0][0][:400]}...\n\n"
                     reply += "I've extracted this from your study resource. Would you like a deeper breakdown of any specific concept?"
                 elif context and "No specific content" not in context:
                     reply += f"{context[:600]}\n\nFeel free to ask follow-up questions to explore further!"
                 else:
-                    reply += f"I analyzed your study materials for '{payload.question}'. Upload additional notes or select active sources to see page-specific citations!"
+                    reply += f"I analyzed your study materials for '{resolved_topic}'. Upload additional notes or select active sources to see page-specific citations!"
 
         return {"answer": reply}
 

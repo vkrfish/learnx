@@ -1149,7 +1149,7 @@ app.post("/api/items/research", authenticateUser, async (req, res) => {
 // 10. CHAT Q&A (RAG-BASED CHAT ROUTED TO FASTAPI)
 app.post("/api/items/:id/chat", authenticateUser, verifyItemOwnership, async (req, res) => {
   const { id } = req.params;
-  const { question, selectedSourceIds, stream } = req.body;
+  const { question, selectedSourceIds, stream, chat_history } = req.body;
   const shouldStream = stream === true || req.query.stream === "true" || req.headers.accept?.includes("text/event-stream");
 
   if (!isUuid(id)) {
@@ -1179,12 +1179,26 @@ app.post("/api/items/:id/chat", authenticateUser, verifyItemOwnership, async (re
   }
 
   try {
-    // 1. Retrieve the existing conversation history (excluding the current user turn)
-    const historyRes = await pool.query(
-      "SELECT role, content FROM public.chat_messages WHERE item_id = $1 ORDER BY created_at ASC LIMIT 10",
-      [id],
-    );
-    const chatHistory = historyRes.rows;
+    // 1. Retrieve the existing conversation history (client-provided or DB)
+    let chatHistory = [];
+    if (chat_history && Array.isArray(chat_history) && chat_history.length > 0) {
+      chatHistory = chat_history.map(m => ({
+        role: m.role === "assistant" || m.role === "bot" ? "assistant" : "user",
+        content: m.content || ""
+      })).filter(m => m.content && m.content.trim().length > 0).slice(-10);
+    } else {
+      const historyRes = await pool.query(
+        `SELECT role, content FROM (
+           SELECT role, content, created_at 
+           FROM public.chat_messages 
+           WHERE item_id = $1 
+           ORDER BY created_at DESC 
+           LIMIT 10
+         ) sub ORDER BY created_at ASC`,
+        [id],
+      );
+      chatHistory = historyRes.rows;
+    }
 
     // 2. Record User Message
     await pool.query(
