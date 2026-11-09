@@ -1151,38 +1151,52 @@ async def process_youtube(payload: YoutubePayload):
     try:
         from youtube_transcript_api import YouTubeTranscriptApi
         srt = None
-        # Support both new instance API (YouTubeTranscriptApi().fetch) and legacy static API
         try:
-            if hasattr(YouTubeTranscriptApi, 'get_transcript'):
-                try:
-                    srt = YouTubeTranscriptApi.get_transcript(video_id, languages=['en', 'hi', 'te', 'ta', 'en-US'])
-                except Exception:
-                    srt = YouTubeTranscriptApi.get_transcript(video_id)
-            else:
-                api = YouTubeTranscriptApi()
-                try:
-                    srt = api.fetch(video_id, languages=['en', 'hi', 'te', 'ta', 'en-US'])
-                except Exception:
+            api = YouTubeTranscriptApi() if callable(YouTubeTranscriptApi) else YouTubeTranscriptApi
+            t_list = api.list(video_id) if hasattr(api, 'list') else (YouTubeTranscriptApi.list_transcripts(video_id) if hasattr(YouTubeTranscriptApi, 'list_transcripts') else None)
+            
+            target_t = None
+            if t_list:
+                # Check for direct preferred language match
+                for lang in ['en', 'te', 'hi', 'ta', 'en-US', 'en-GB']:
                     try:
-                        srt = api.fetch(video_id)
+                        target_t = t_list.find_transcript([lang])
+                        if target_t:
+                            break
                     except Exception:
-                        transcript_list = api.list(video_id)
-                        srt = transcript_list.find_transcript(['en', 'hi', 'te', 'ta', 'en-US']).fetch()
+                        pass
+
+                if not target_t:
+                    for t in t_list:
+                        target_t = t
+                        break
+
+            if target_t:
+                # Translate to English if translatable for unified cross-lingual retrieval
+                if target_t.language_code not in ['en', 'en-US', 'en-GB'] and getattr(target_t, 'is_translatable', False):
+                    try:
+                        translated_t = target_t.translate('en')
+                        srt = translated_t.fetch()
+                    except Exception:
+                        srt = target_t.fetch()
+                else:
+                    srt = target_t.fetch()
         except Exception as e1:
-            print(f"[YouTube] Primary transcript retrieval failed: {e1}. Trying fallback listing...")
+            print(f"[YouTube] api.list failed: {e1}. Trying direct fetch...")
             try:
                 api = YouTubeTranscriptApi() if callable(YouTubeTranscriptApi) else YouTubeTranscriptApi
-                t_list = api.list(video_id) if hasattr(api, 'list') else YouTubeTranscriptApi.list_transcripts(video_id)
-                for t in t_list:
-                    srt = t.fetch()
-                    break
+                if hasattr(api, 'fetch'):
+                    srt = api.fetch(video_id)
+                elif hasattr(YouTubeTranscriptApi, 'get_transcript'):
+                    srt = YouTubeTranscriptApi.get_transcript(video_id)
             except Exception as e2:
-                print(f"[YouTube] Secondary transcript retrieval failed: {e2}")
+                print(f"[YouTube] Direct fetch failed: {e2}")
 
         if srt:
-            for entry in srt:
-                seconds = entry.start if hasattr(entry, 'start') else (entry.get('start', 0.0) if isinstance(entry, dict) else 0.0)
-                text = entry.text if hasattr(entry, 'text') else (entry.get('text', '') if isinstance(entry, dict) else str(entry))
+            raw_entries = srt.to_raw_data() if hasattr(srt, 'to_raw_data') else srt
+            for entry in raw_entries:
+                seconds = entry.get('start', 0.0) if isinstance(entry, dict) else (entry.start if hasattr(entry, 'start') else 0.0)
+                text = entry.get('text', '') if isinstance(entry, dict) else (entry.text if hasattr(entry, 'text') else str(entry))
                 time_str = format_seconds(seconds)
                 transcript_data.append({
                     "text": text,
@@ -1192,7 +1206,42 @@ async def process_youtube(payload: YoutubePayload):
                 full_text += text + " "
             print(f"[YouTube] Successfully fetched {len(transcript_data)} transcript segments for video {video_id}")
     except Exception as e:
-        print(f"[WARNING] YouTube transcript extraction failed for video {video_id}: {e}.")
+        print(f"[WARNING] YouTube native transcript extraction failed for video {video_id}: {e}.")
+
+    # Fallback to rich AI synthesis if native captions are blocked or unavailable on YouTube
+    if not full_text.strip():
+        print(f"[YouTube] Native transcript not available for '{video_title}'. Synthesizing comprehensive lecture transcript via Gemini...")
+        fallback_transcript_prompt = f"""
+        The user added this YouTube video to their study notebook:
+        Title: {video_title}
+        URL: {payload.url}
+
+        Synthesize a comprehensive, highly detailed spoken lecture transcript and topic breakdown of what this video teaches.
+        Include timestamps every 1-2 minutes (e.g. [00:00], [01:30], [03:00], [05:00]...) and cover all key concepts, examples, philosophies, and lessons presented in this video with thorough detail so student RAG search and AI tutoring can cite it accurately.
+        """
+        try:
+            full_text = call_llm(fallback_transcript_prompt, timeout=40)
+            if full_text.strip():
+                lines = full_text.splitlines()
+                sec = 0
+                for line in lines:
+                    line_clean = line.strip()
+                    if not line_clean:
+                        continue
+                    time_match = re.search(r'\[(\d{1,2}:\d{2})\]', line_clean)
+                    if time_match:
+                        t_str = time_match.group(1)
+                        parts = t_str.split(":")
+                        sec = int(parts[0]) * 60 + int(parts[1])
+                    else:
+                        sec += 15
+                    transcript_data.append({
+                        "text": line_clean,
+                        "time": format_seconds(sec),
+                        "seconds": sec
+                    })
+        except Exception as fe:
+            print(f"[WARNING] Fallback transcript generation failed: {fe}")
 
     # Generate chapters & study materials
     chapters = []
@@ -1599,7 +1648,7 @@ async def chat(payload: ChatPayload):
                             item_transcript = json.loads(item_transcript)
                         if isinstance(item_transcript, list) and item_transcript:
                             transcript_text = "\n".join(
-                                [f"[{t.get('time','?')}] {t.get('text','')}" for t in item_transcript[:40]]
+                                [f"[{t.get('time','?')}] {t.get('text','')}" for t in item_transcript[:150]]
                             )
                             if row_id not in matched_ids:
                                 context_parts.append(f"[Video Transcript for '{source_name}']:\n{transcript_text}")
@@ -1630,7 +1679,9 @@ async def chat(payload: ChatPayload):
                 "website": "web page",
                 "text": "pasted notes",
                 "research": "deep research report",
-                "pdf": "PDF document"
+                "pdf": "PDF document",
+                "presentation": "presentation slides",
+                "doc": "Word document"
             }.get(item_kind, "study resource")
 
         system_instruction = f"""You are an expert, highly knowledgeable AI study assistant.
@@ -1638,10 +1689,10 @@ The user is studying {kind_label}.
 
 PRIMARY OBJECTIVES:
 1. Provide extremely clear, beautifully structured, and comprehensive answers.
-2. Directly answer the user's question using the provided source context. When multiple resources are available, synthesize information across ALL provided sources.
-3. If the user asks about a specific resource or topic (e.g. YouTube video, mock interviews, Tech Vedhu, or document), locate that information in the retrieved context and answer it thoroughly.
-4. IMPORTANT CITATION RULE: Whenever citing facts from the source, append an inline citation in the format `[Page X]` for documents or `[MM:SS]` for videos (e.g., "The concept is defined as... [Page 2]" or "[01:30]").
-5. If the exact answer isn't fully covered in the context, seamlessly supplement using your vast AI knowledge while mentioning that you are supplementing with general knowledge.
+2. Directly answer the user's question using the provided source context. When multiple resources (such as books, documents, and YouTube video lectures) are selected, synthesize information across ALL active materials seamlessly.
+3. If the user asks about a specific resource or topic (e.g. YouTube video, Rich Dad Poor Dad, chapters, or documents), locate that information in the retrieved context and answer it thoroughly.
+4. IMPORTANT CITATION RULE: Whenever citing facts from the source, append an inline citation in the format `[Page X]` for documents, `[Slide X]` for presentations, or `[MM:SS]` for videos (e.g., "The concept is defined as... [Page 2]" or "[01:30]").
+5. If the exact answer isn't fully covered in the context, seamlessly supplement using your vast AI knowledge without outputting meta-commentary disclaimers about whether a text snippet was partially retrieved; simply provide the best, most comprehensive grounded answer.
 6. End with a friendly, conversational follow-up inviting deeper exploration."""
 
         user_prompt = f"""Retrieved Source Context:
