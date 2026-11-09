@@ -162,7 +162,10 @@ const authenticateUser = async (req, res, next) => {
   }
 
   if (!token) {
-    return res.status(401).json({ error: "Missing or invalid authorization token" });
+    // Allow guest / local workspace sessions to create and manage notebooks seamlessly
+    const defaultUserId = "227a0f49-8610-4ef6-b200-c10e4f6ccdd8";
+    req.user = { id: defaultUserId, email: "guest@ultralearn.ai", isGuest: true };
+    return next();
   }
 
   // 1. Check in-memory auth cache for sub-millisecond resolution

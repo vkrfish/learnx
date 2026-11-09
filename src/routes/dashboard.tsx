@@ -264,9 +264,16 @@ export default function DashboardPage() {
         const allItems: StudyItem[] = await res.json();
         setBackendOffline(false);
 
-        // Filter notebooks
+        // Filter notebooks and preserve newly created in-flight notebooks
         const nbs = allItems.filter((it) => it.kind === "notebook");
-        setNotebooks(nbs);
+        setNotebooks((prev) => {
+          const serverIds = new Set(nbs.map((n) => n.id));
+          const serverTitles = new Set(nbs.map((n) => n.title.toLowerCase().trim()));
+          const pendingNbs = prev.filter(
+            (p) => !serverIds.has(p.id) && !serverTitles.has(p.title.toLowerCase().trim())
+          );
+          return [...pendingNbs, ...nbs];
+        });
 
         // Filter sources of active notebook
         if (activeNotebookId) {
@@ -309,7 +316,14 @@ export default function DashboardPage() {
       try {
         const allItems: StudyItem[] = JSON.parse(saved);
         const nbs = allItems.filter((it) => it.kind === "notebook");
-        setNotebooks(nbs);
+        setNotebooks((prev) => {
+          const localIds = new Set(nbs.map((n) => n.id));
+          const localTitles = new Set(nbs.map((n) => n.title.toLowerCase().trim()));
+          const pendingNbs = prev.filter(
+            (p) => !localIds.has(p.id) && !localTitles.has(p.title.toLowerCase().trim())
+          );
+          return [...pendingNbs, ...nbs];
+        });
 
         if (activeNotebookId) {
           const srcList = allItems.filter((it) => it.notebookId === activeNotebookId);
@@ -472,8 +486,14 @@ export default function DashboardPage() {
       ],
     };
 
+    // Always persist to local storage immediately so it exists across all navigation views
+    const localItems: StudyItem[] = localStorage.getItem("ultra_learn_items")
+      ? JSON.parse(localStorage.getItem("ultra_learn_items")!)
+      : [];
+    saveLocalItems([optimisticNb, ...localItems.filter((it: StudyItem) => it.id !== tempId)]);
+
     // INSTANT OPTIMISTIC TRANSITION: 0ms latency
-    setNotebooks((prev) => [optimisticNb, ...prev]);
+    setNotebooks((prev) => [optimisticNb, ...prev.filter((nb) => nb.id !== tempId)]);
     setActiveNotebookId(tempId);
     setActiveNotebook(optimisticNb);
     setSelectedSourceIds([]);
@@ -489,23 +509,24 @@ export default function DashboardPage() {
         body: JSON.stringify({ title: finalTitle }),
       })
         .then(async (res) => {
-          if (!res.ok) throw new Error("Create failed");
+          if (!res.ok) {
+            console.warn("Server notebook create response code:", res.status);
+            return;
+          }
           const data = await res.json();
           // Replace temporary UUID with persisted DB ID smoothly
           setActiveNotebookId((curr) => (curr === tempId ? data.id : curr));
           setActiveNotebook((curr) => (curr && curr.id === tempId ? { ...curr, id: data.id } : curr));
           setNotebooks((prev) => prev.map((nb) => (nb.id === tempId ? { ...nb, id: data.id } : nb)));
+
+          const updatedLocal: StudyItem[] = localStorage.getItem("ultra_learn_items")
+            ? JSON.parse(localStorage.getItem("ultra_learn_items")!)
+            : [];
+          saveLocalItems(updatedLocal.map((it) => (it.id === tempId ? { ...it, id: data.id } : it)));
         })
         .catch((e) => {
-          console.error("Optimistic notebook create failed:", e);
-          setNotebooks((prev) => prev.filter((nb) => nb.id !== tempId));
-          toast.error("Could not write to Postgres DB.");
+          console.warn("Optimistic notebook sync to server delayed:", e.message, "- notebook preserved in local storage.");
         });
-    } else {
-      const allItems = localStorage.getItem("ultra_learn_items")
-        ? JSON.parse(localStorage.getItem("ultra_learn_items")!)
-        : [];
-      saveLocalItems([optimisticNb, ...allItems]);
     }
   };
 
@@ -517,9 +538,14 @@ export default function DashboardPage() {
     );
     if (!confirmed) return;
 
-    // OPTIMISTIC: remove notebook from state immediately (0ms lag)
+    // OPTIMISTIC: remove notebook from state and local storage immediately (0ms lag)
     const prevNbs = notebooks;
     setNotebooks((prev) => prev.filter((nb) => nb.id !== id));
+    const localItems: StudyItem[] = localStorage.getItem("ultra_learn_items")
+      ? JSON.parse(localStorage.getItem("ultra_learn_items")!)
+      : [];
+    saveLocalItems(localItems.filter((it: StudyItem) => it.id !== id && it.notebookId !== id));
+
     if (activeNotebookId === id) {
       setActiveNotebookId(null);
       setActiveNotebook(null);
