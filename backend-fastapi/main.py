@@ -664,6 +664,17 @@ def insert_document_chunks_to_db(conn, item_id: str, page_chunks: list, title: s
         # Ensure parent item exists / update content
         cur.execute("SELECT id FROM public.study_items WHERE id = %s::uuid", (item_id,))
         exists = cur.fetchone()
+        if not exists and file_name and profile_id:
+            # Check if an item with identical file_name or clean title exists for this user to avoid duplicates
+            cur.execute(
+                "SELECT id FROM public.study_items WHERE (file_name = %s OR title = %s) AND profile_id = %s::uuid LIMIT 1",
+                (file_name, clean_title, profile_id)
+            )
+            existing_row = cur.fetchone()
+            if existing_row:
+                item_id = str(existing_row[0])
+                exists = existing_row
+
         if exists:
             cur.execute(
                 """

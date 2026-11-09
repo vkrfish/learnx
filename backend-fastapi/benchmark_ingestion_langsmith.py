@@ -166,3 +166,4 @@ def run_ingestion_benchmark():
 
 if __name__ == "__main__":
     run_ingestion_benchmark()
+

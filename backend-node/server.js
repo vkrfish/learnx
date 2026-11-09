@@ -563,7 +563,17 @@ app.get("/api/notebooks/:id/sources", authenticateUser, async (req, res) => {
       [id, req.user.id],
     );
     const sources = result.rows.map(formatItem);
-    res.json(sources);
+    // Deduplicate sources by filename or title
+    const seen = new Set();
+    const deduplicatedSources = [];
+    for (const s of sources) {
+      const key = (s.fileName || s.title || "").toLowerCase().trim();
+      if (!seen.has(key)) {
+        seen.add(key);
+        deduplicatedSources.push(s);
+      }
+    }
+    res.json(deduplicatedSources);
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: e.message });
@@ -578,6 +588,18 @@ app.get("/api/items", authenticateUser, async (req, res) => {
       [req.user.id],
     );
     let items = result.rows.map(formatItem);
+
+    // Deduplicate any duplicate database entries (by notebook + fileName/title)
+    const seenItems = new Set();
+    const deduplicatedItems = [];
+    for (const it of items) {
+      const dedupeKey = it.kind === "notebook" ? `nb_${it.id}` : `${it.notebookId || "none"}_${(it.fileName || it.title || "").toLowerCase().trim()}`;
+      if (!seenItems.has(dedupeKey)) {
+        seenItems.add(dedupeKey);
+        deduplicatedItems.push(it);
+      }
+    }
+    items = deduplicatedItems;
 
     // Auto-provision an isolated starter notebook if this user has 0 notebooks
     const hasNotebook = items.some((it) => it.kind === "notebook");
@@ -740,11 +762,39 @@ app.post("/api/items/file", authenticateUser, upload.single("file"), async (req,
       notebookId = null;
     }
 
-    const itemRes = await pool.query(
-      "INSERT INTO public.study_items (title, kind, file_name, profile_id, file_data, notebook_id) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id",
-      [title, "pdf", req.file.originalname, req.user.id, req.file.buffer, notebookId],
-    );
-    const itemId = itemRes.rows[0].id;
+    // Deduplicate: check if an item with the same file_name in this notebook already exists
+    let itemId = req.body.item_id && isUuid(req.body.item_id) ? req.body.item_id : null;
+    let existingItemRes = null;
+    if (notebookId) {
+      existingItemRes = await pool.query(
+        "SELECT id FROM public.study_items WHERE (file_name = $1 OR title = $2) AND profile_id = $3 AND notebook_id = $4 LIMIT 1",
+        [req.file.originalname, req.file.originalname.split(".")[0], req.user.id, notebookId]
+      );
+    } else {
+      existingItemRes = await pool.query(
+        "SELECT id FROM public.study_items WHERE (file_name = $1 OR title = $2) AND profile_id = $3 LIMIT 1",
+        [req.file.originalname, req.file.originalname.split(".")[0], req.user.id]
+      );
+    }
+
+    if (existingItemRes && existingItemRes.rows.length > 0) {
+      itemId = existingItemRes.rows[0].id;
+      await pool.query(
+        "UPDATE public.study_items SET file_data = $1, updated_at = NOW() WHERE id = $2",
+        [req.file.buffer, itemId]
+      );
+    } else if (itemId) {
+      await pool.query(
+        "INSERT INTO public.study_items (id, title, kind, file_name, profile_id, file_data, notebook_id) VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (id) DO UPDATE SET file_data = $6",
+        [itemId, title, "pdf", req.file.originalname, req.user.id, req.file.buffer, notebookId],
+      );
+    } else {
+      const itemRes = await pool.query(
+        "INSERT INTO public.study_items (title, kind, file_name, profile_id, file_data, notebook_id) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id",
+        [title, "pdf", req.file.originalname, req.user.id, req.file.buffer, notebookId],
+      );
+      itemId = itemRes.rows[0].id;
+    }
 
     // 2. Forward File to FastAPI for chunking, embedding, and generating cards
     const formData = new FormData();
@@ -770,7 +820,7 @@ app.post("/api/items/file", authenticateUser, upload.single("file"), async (req,
     }
 
     // 4. Insert Flashcards
-    for (const card of flashcards) {
+    for (const card of (flashcards || [])) {
       await pool.query(
         "INSERT INTO public.flashcards (item_id, question, answer, hint) VALUES ($1, $2, $3, $4)",
         [itemId, card.question, card.answer, card.hint],
