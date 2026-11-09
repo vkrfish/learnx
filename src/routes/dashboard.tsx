@@ -605,6 +605,11 @@ export default function DashboardPage() {
       },
     ]);
 
+    // Safety auto-dismiss timeout (max 10s safeguard so progress card never gets stuck)
+    const uploadTimer = setTimeout(() => {
+      setUploadingSources((prev) => prev.filter((u) => u.id !== tempUploadId));
+    }, 10000);
+
     let uploadedItem: StudyItem | null = null;
     let metricsInfo: any = null;
 
@@ -626,27 +631,34 @@ export default function DashboardPage() {
         });
 
         if (res.ok) {
+          clearTimeout(uploadTimer);
           const data = await res.json();
           blobUrlsRef.current.set(data.id, blobUrl);
           metricsInfo = data.metrics;
 
-          // Fetch fresh list from server to get full DB record
-          await fetchItems();
-          setSelectedSourceIds((prev) => Array.from(new Set([...prev, data.id])));
-          uploadedItem = {
+          // Immediately remove from pending upload list (0ms delay)
+          setUploadingSources((prev) => prev.filter((u) => u.id !== tempUploadId));
+
+          const newSourceItem: StudyItem = {
             id: data.id,
             notebookId: activeNotebookId,
             title: cleanTitle,
             createdAt: new Date().toISOString(),
             kind: fileKind,
             fileName: cleanFileName,
-            content: `Grounded knowledge indexed for ${cleanFileName}`,
+            content: data.content || `Grounded knowledge indexed for ${cleanFileName}`,
             localFileUrl: blobUrl,
-            flashcards: [],
-            quiz: [],
+            flashcards: data.flashcards || [],
+            quiz: data.quiz || [],
             notes: "",
             chatHistory: [],
           };
+          setSources((prev) => deduplicateSources([newSourceItem, ...prev]));
+          setSelectedSourceIds((prev) => Array.from(new Set([...prev, data.id])));
+          uploadedItem = newSourceItem;
+
+          // Sync fresh full database records in background without blocking UI
+          fetchItems().catch(() => {});
         }
       } catch (e) {
         console.warn("Node gateway upload failed or timed out, trying direct FastAPI call...", e);
@@ -670,9 +682,14 @@ export default function DashboardPage() {
         });
 
         if (fRes.ok) {
+          clearTimeout(uploadTimer);
           const fData = await fRes.json();
           metricsInfo = fData.metrics;
           blobUrlsRef.current.set(tempUploadId, blobUrl);
+
+          // Immediately remove from pending upload list (0ms delay)
+          setUploadingSources((prev) => prev.filter((u) => u.id !== tempUploadId));
+
           const newItem: StudyItem = {
             id: tempUploadId,
             notebookId: activeNotebookId,
@@ -704,6 +721,7 @@ export default function DashboardPage() {
 
     // 3. Fallback mock if both backends are down
     if (!uploadedItem) {
+      clearTimeout(uploadTimer);
       const newItem: StudyItem = {
         id: tempUploadId,
         notebookId: activeNotebookId,

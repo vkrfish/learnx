@@ -1193,11 +1193,10 @@ app.post("/api/items/:id/chat", authenticateUser, verifyItemOwnership, async (re
       chatHistory = historyRes.rows;
     }
 
-    // 2. Record User Message
-    await pool.query(
-      "INSERT INTO public.chat_messages (item_id, role, content) VALUES ($1, $2, $3)",
-      [id, "user", question],
-    );
+    // 2. Record User Message (Asynchronous fire-and-forget to avoid blocking the stream!)
+    pool
+      .query("INSERT INTO public.chat_messages (item_id, role, content) VALUES ($1, $2, $3)", [id, "user", question])
+      .catch((err) => console.warn("Background chat user message save warning:", err.message));
 
     // 3. Contact FastAPI for vector RAG query & generation (including history)
     const ragItemId = (selectedSourceIds && selectedSourceIds.length > 0)

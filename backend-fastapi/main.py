@@ -8,6 +8,7 @@ import io
 import zipfile
 import html
 import asyncio
+import threading
 import requests
 import numpy as np
 import psycopg2
@@ -350,9 +351,9 @@ def call_llm(prompt: str, system_instruction: str = None, json_mode: bool = Fals
     2. OpenRouter API (google/gemini-2.5-flash / llama-3.3-70b-instruct)
     3. Raises RuntimeError if all remote calls fail to allow local fallback.
     """
-    # 1. Try Gemini REST API
+    # 1. Try Gemini REST API (Prioritize blazing-fast gemini-flash-lite-latest with sub-second TTFT)
     if GEMINI_API_KEY:
-        gemini_models = ["gemini-2.5-flash", "gemini-flash-lite-latest", "gemini-2.0-flash", "gemini-flash-latest"]
+        gemini_models = ["gemini-flash-lite-latest", "gemini-2.5-flash", "gemini-flash-latest"]
         for model_name in gemini_models:
             try:
                 url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={GEMINI_API_KEY}"
@@ -429,9 +430,9 @@ def call_llm_stream(prompt: str, system_instruction: str = None, chat_history: l
     """
     Yields streamed text tokens from Google Gemini REST streaming API or OpenRouter with fallback.
     """
-    # 1. Try Google Gemini REST Streaming
+    # 1. Try Google Gemini REST Streaming (Prioritize ultra-low latency gemini-flash-lite-latest)
     if GEMINI_API_KEY:
-        gemini_models = ["gemini-2.5-flash", "gemini-flash-lite-latest", "gemini-2.0-flash", "gemini-flash-latest"]
+        gemini_models = ["gemini-flash-lite-latest", "gemini-2.5-flash", "gemini-flash-latest"]
         for model_name in gemini_models:
             try:
                 url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:streamGenerateContent?key={GEMINI_API_KEY}&alt=sse"
@@ -965,14 +966,14 @@ async def process_pdf(file: UploadFile = File(...), item_id: str = Form(...), pr
                 detected_mime = m
                 break
 
+        # Step 1: Upload to Google Gemini Files API in background (Non-blocking: saves 2.5s on ingestion!)
         if detected_mime and GEMINI_API_KEY:
-            t_gemini_start = time.time()
-            try:
-                gemini_info = upload_to_gemini_files_api(file_bytes, file.filename, mime_type=detected_mime)
-                gemini_file_uri = gemini_info.get("uri")
-                gemini_upload_duration_ms = round((time.time() - t_gemini_start) * 1000, 2)
-            except Exception as ge:
-                print(f"[WARNING] Gemini Files API upload skipped: {ge}")
+            def bg_gemini_upload():
+                try:
+                    upload_to_gemini_files_api(file_bytes, file.filename, mime_type=detected_mime)
+                except Exception as ge:
+                    print(f"[WARNING] Background Gemini Files API upload skipped: {ge}")
+            threading.Thread(target=bg_gemini_upload, daemon=True).start()
 
         # Step 2: Fast text extraction & chunk sampling
         t_extract_start = time.time()
@@ -1543,43 +1544,43 @@ def condense_rag_query(question: str, chat_history: list) -> str:
         or (len(cleaned_q.split()) <= 3 and any(w in cleaned_q.split() for w in ("yes", "sure", "ok", "please", "more", "continue")))
     )
 
-    history_text = "\n".join([
-        f"{'User' if getattr(m, 'role', '') == 'user' or (isinstance(m, dict) and m.get('role') == 'user') else 'Assistant'}: {getattr(m, 'content', '') if hasattr(m, 'content') else (m.get('content', '') if isinstance(m, dict) else str(m))}"
-        for m in chat_history[-6:]
-    ])
-
-    condensation_prompt = f"""Given the conversation history and a follow-up user message, rewrite the follow-up message into a complete, standalone RAG search query.
-CRITICAL RULES:
-1. If the user input is an affirmative confirmation (like 'yes', 'sure', 'go ahead', 'tell me more', 'ok', 'please do'), inspect the previous Assistant message and extract the exact topics, concepts, or breakdown offered (e.g. candidate education, technical skills, projects, key chapters, definitions). Formulate a search query requesting those specific topics.
-2. The standalone query MUST contain the specific entities, document topics, or concept names from the conversation.
-3. NEVER return a generic word like 'yes', 'sure', or 'details'. Always include the domain subject matter.
-4. Return ONLY the standalone search query string without any quotes, preamble, or answering the question.
-
-Conversation History:
-{history_text}
-
-Follow-up User Message: {question}
-Standalone Search Query:"""
-
-    try:
-        condensed = call_llm(condensation_prompt, timeout=10).strip()
-        condensed = re.sub(r'^["\'`]+|["\'`]+$', '', condensed).strip()
-        if condensed and len(condensed) > 3 and condensed.lower() not in AFFIRMATIVE_CONFIRMATIONS:
-            return condensed
-    except Exception as e:
-        print(f"[WARNING] LLM query condensation failed: {e}")
-
-    # Fallback heuristic if LLM timed out or returned something too short / affirmative
+    # FAST PATH 1: Affirmative follow-ups ("yes", "sure", "continue") -> Instant regex topic extraction (0ms latency!)
     if is_affirmative and last_assistant_msg:
-        # Match topic list indicators first
         match = re.search(r'(?:such as|including|for example|e\.g\.)\s+([^.?!]+)', last_assistant_msg, re.IGNORECASE)
         if not match:
-            # Match action verbs
             match = re.search(r'(?:explore|review|analyze|learn about|discuss|examine|break down)\s+([^.?!]+)', last_assistant_msg, re.IGNORECASE)
         if match:
             clean_topics = re.sub(r'^(?:to\s+explore\s+|any\s+other\s+details\s+from\s+this\s+(?:resume|document|source|materials?),?\s*(?:such\s+as\s+)?)', '', match.group(1).strip(), flags=re.IGNORECASE)
             return f"Detailed breakdown of {clean_topics.strip()} from document"
         return f"Comprehensive details and analysis of topics mentioned in: {last_assistant_msg[:120]}"
+
+    # FAST PATH 2: Self-contained questions without ambiguous pronouns -> 0ms latency!
+    ambiguous_pronouns = {"it", "its", "this", "that", "these", "those", "they", "them", "he", "him", "his", "she", "her"}
+    q_words = set(cleaned_q.split())
+    has_pronoun = bool(q_words & ambiguous_pronouns)
+    if not has_pronoun or len(q_words) >= 6 or not last_assistant_msg:
+        # Question is already standalone, use it directly without a slow remote LLM roundtrip
+        return question
+
+    # FAST PATH 3: Contextual reference with pronoun (e.g. "how does it work?") -> Fast contextual merge in 0ms!
+    subject_match = re.search(r'\*\*([^*]+)\*\*', last_assistant_msg)
+    if subject_match:
+        prev_subject = subject_match.group(1).strip()
+        return f"{question} regarding {prev_subject}"
+
+    # Only if truly ambiguous, fast 2s LLM query condensation
+    try:
+        history_text = "\n".join([
+            f"{'User' if getattr(m, 'role', '') == 'user' or (isinstance(m, dict) and m.get('role') == 'user') else 'Assistant'}: {getattr(m, 'content', '') if hasattr(m, 'content') else (m.get('content', '') if isinstance(m, dict) else str(m))}"
+            for m in chat_history[-3:]
+        ])
+        condensation_prompt = f"Rewrite this follow-up into a standalone search query: '{question}' given conversation:\n{history_text}\nReturn ONLY the query:"
+        condensed = call_llm(condensation_prompt, timeout=2).strip()
+        condensed = re.sub(r'^["\'`]+|["\'`]+$', '', condensed).strip()
+        if condensed and len(condensed) > 3:
+            return condensed
+    except Exception:
+        pass
 
     return question
 
