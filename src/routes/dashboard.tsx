@@ -3911,9 +3911,9 @@ function StudySessionPanel({
                     </div>
                     <div className="flex items-center gap-1.5 text-muted-foreground px-1">
                       <span className="flex gap-1 items-center">
-                        <span className="h-1.5 w-1.5 rounded-full bg-primary/60 animate-bounce" />
-                        <span className="h-1.5 w-1.5 rounded-full bg-primary/60 animate-bounce [animation-delay:150ms]" />
-                        <span className="h-1.5 w-1.5 rounded-full bg-primary/60 animate-bounce [animation-delay:300ms]" />
+                        <span className="h-1.5 w-1.5 rounded-full bg-primary/60 animate-pulse" />
+                        <span className="h-1.5 w-1.5 rounded-full bg-primary/60 animate-pulse [animation-delay:150ms]" />
+                        <span className="h-1.5 w-1.5 rounded-full bg-primary/60 animate-pulse [animation-delay:300ms]" />
                       </span>
                       <span className="text-[11px] text-muted-foreground ml-1">Thinking...</span>
                     </div>

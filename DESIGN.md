@@ -32,25 +32,25 @@ colors:
 
 typography:
   display-xl:
-    fontFamily: "Copernicus, Tiempos Headline, serif"
+    fontFamily: "Newsreader, Copernicus, Tiempos Headline, serif"
     fontSize: 64px
     fontWeight: 400
     lineHeight: 1.05
     letterSpacing: -1.5px
   display-lg:
-    fontFamily: "Copernicus, Tiempos Headline, serif"
+    fontFamily: "Newsreader, Copernicus, Tiempos Headline, serif"
     fontSize: 48px
     fontWeight: 400
     lineHeight: 1.1
     letterSpacing: -1px
   display-md:
-    fontFamily: "Copernicus, Tiempos Headline, serif"
+    fontFamily: "Newsreader, Copernicus, Tiempos Headline, serif"
     fontSize: 36px
     fontWeight: 400
     lineHeight: 1.15
     letterSpacing: -0.5px
   display-sm:
-    fontFamily: "Copernicus, Tiempos Headline, serif"
+    fontFamily: "Newsreader, Copernicus, Tiempos Headline, serif"
     fontSize: 28px
     fontWeight: 400
     lineHeight: 1.2
@@ -97,6 +97,18 @@ typography:
     fontWeight: 500
     lineHeight: 1.4
     letterSpacing: 1.5px
+  caption-micro:
+    fontFamily: "StyreneB, Inter, JetBrains Mono, sans-serif"
+    fontSize: 11px
+    fontWeight: 500
+    lineHeight: 1.4
+    letterSpacing: 0
+  caption-nano:
+    fontFamily: "StyreneB, Inter, JetBrains Mono, sans-serif"
+    fontSize: 10px
+    fontWeight: 500
+    lineHeight: 1.3
+    letterSpacing: 0.5px
   code:
     fontFamily: "JetBrains Mono, ui-monospace, monospace"
     fontSize: 14px

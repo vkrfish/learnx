@@ -31,6 +31,7 @@ backend-node/uploads/
 uploads/
 *.pdf
 *.docx
+*.exe
 *.pyc
 __pycache__/
 scratch/
