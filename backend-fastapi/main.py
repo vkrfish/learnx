@@ -20,6 +20,7 @@ from typing import List, Dict, Any, Optional
 import uvicorn
 import pypdf
 import edge_tts
+import concurrent.futures
 from quiz_service import generate_rag_quiz, evaluate_quiz_submission
 from tutor_service import (
     generate_tutor_outline,
@@ -233,6 +234,81 @@ def get_embedding(text: str, fast: bool = False) -> list:
     if norm > 0:
         vec = vec / norm
     return vec.tolist()
+
+@traceable(run_type="embedding", name="Gemini / OpenRouter Batch Embeddings")
+def get_embeddings_batch(texts: list, fast: bool = False) -> list:
+    """
+    Batches up to 100 texts in a single HTTP request to Gemini batchEmbedContents
+    or OpenRouter embeddings. Falls back to individual or local fallback.
+    """
+    target_dim = 1536
+    if not texts:
+        return []
+
+    cleaned = [(t or "").strip()[:8000] for t in texts]
+
+    # 1. Try Gemini batchEmbedContents
+    if not fast and GEMINI_API_KEY:
+        try:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents?key={GEMINI_API_KEY}"
+            requests_list = [
+                {
+                    "model": "models/gemini-embedding-001",
+                    "content": {"parts": [{"text": txt if txt else "empty chunk"}]},
+                    "outputDimensionality": target_dim
+                }
+                for txt in cleaned
+            ]
+            payload = {"requests": requests_list}
+            res = requests.post(url, json=payload, timeout=25)
+            if res.status_code == 200:
+                data = res.json()
+                embeddings_data = data.get("embeddings", [])
+                if len(embeddings_data) == len(texts):
+                    results = []
+                    for item in embeddings_data:
+                        vals = item.get("values", [])
+                        if len(vals) < target_dim:
+                            vals = vals + [0.0] * (target_dim - len(vals))
+                        results.append(vals[:target_dim])
+                    return results
+            else:
+                print(f"[WARNING] Gemini batchEmbedContents error {res.status_code}: {res.text[:150]}")
+        except Exception as e:
+            print(f"[WARNING] Gemini batchEmbedContents failed: {e}")
+
+    # 2. Try OpenRouter batch embeddings
+    if not fast and OPENROUTER_API_KEY:
+        try:
+            url = "https://openrouter.ai/api/v1/embeddings"
+            headers = {
+                "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+                "Content-Type": "application/json"
+            }
+            payload = {
+                "model": "openai/text-embedding-3-small",
+                "input": [txt if txt else "empty chunk" for txt in cleaned]
+            }
+            res = requests.post(url, json=payload, headers=headers, timeout=25)
+            if res.status_code == 200:
+                res_json = res.json()
+                data_items = res_json.get("data", [])
+                if len(data_items) == len(texts):
+                    data_items = sorted(data_items, key=lambda x: x.get("index", 0))
+                    results = []
+                    for item in data_items:
+                        vals = item.get("embedding", [])
+                        if len(vals) < target_dim:
+                            vals = vals + [0.0] * (target_dim - len(vals))
+                        results.append(vals[:target_dim])
+                    return results
+            else:
+                print(f"[WARNING] OpenRouter batch embedding error {res.status_code}: {res.text[:150]}")
+        except Exception as e:
+            print(f"[WARNING] OpenRouter batch embedding failed: {e}")
+
+    # Fallback: Process each chunk using get_embedding
+    return [get_embedding(txt, fast=fast) for txt in cleaned]
 
 @traceable(run_type="llm", name="Gemini 2.5 Flash Generator")
 def call_llm(prompt: str, system_instruction: str = None, json_mode: bool = False, chat_history: list = None, timeout: int = 35, system_prompt: str = None, **kwargs) -> str:
@@ -587,10 +663,38 @@ def insert_document_chunks_to_db(conn, item_id: str, page_chunks: list, title: s
         # Clear previous chunks for this item if re-ingesting
         cur.execute("DELETE FROM public.document_chunks WHERE item_id = %s::uuid", (item_id,))
 
+        # Batch texts into chunks of up to 60 items for high-speed parallel vectorization
+        batch_size = 60
+        text_batches = []
+        metadata_batches = []
+        for i in range(0, len(page_chunks), batch_size):
+            slice_chunks = page_chunks[i:i + batch_size]
+            text_batches.append([c[2] for c in slice_chunks])
+            metadata_batches.append([(c[0], c[1], c[2]) for c in slice_chunks])
+
+        # Run batch embedding across concurrent ThreadPoolExecutor workers
+        embeddings_all = [None] * len(text_batches)
+        if text_batches:
+            workers = min(len(text_batches), 6) or 1
+            with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
+                future_to_idx = {
+                    executor.submit(get_embeddings_batch, b_texts, False): idx
+                    for idx, b_texts in enumerate(text_batches)
+                }
+                for future in concurrent.futures.as_completed(future_to_idx):
+                    b_idx = future_to_idx[future]
+                    try:
+                        embeddings_all[b_idx] = future.result()
+                    except Exception as e:
+                        print(f"[WARNING] Batch embedding error for batch {b_idx}: {e}")
+                        embeddings_all[b_idx] = [get_embedding(t) for t in text_batches[b_idx]]
+
         data_list = []
-        for p_item_id, page_num, chunk_text_content in page_chunks:
-            emb = get_embedding(chunk_text_content, fast=False)
-            data_list.append((p_item_id, page_num, chunk_text_content, emb))
+        for b_idx, meta_batch in enumerate(metadata_batches):
+            b_embs = embeddings_all[b_idx] or []
+            for item_idx, (p_item_id, page_num, chunk_text_content) in enumerate(meta_batch):
+                emb = b_embs[item_idx] if item_idx < len(b_embs) else get_embedding(chunk_text_content)
+                data_list.append((p_item_id, page_num, chunk_text_content, emb))
 
         if data_list:
             execute_values(
@@ -790,13 +894,12 @@ async def process_pdf(file: UploadFile = File(...), item_id: str = Form(...), pr
                 profile_id=profile_id
             )
 
-        # 4. Generate flashcards and quizzes
-        materials = generate_study_materials(effective_content, file.filename)
-
+        # Fast response: Flashcards and quizzes are generated on-demand
         return {
             "content": full_text,
-            "flashcards": materials["flashcards"],
-            "quiz": materials["quiz"]
+            "flashcards": [],
+            "quiz": [],
+            "status": "ready"
         }
     except HTTPException as he:
         raise he
@@ -1051,11 +1154,10 @@ async def process_website(payload: UrlPayload):
         )
         conn.close()
 
-    materials = generate_study_materials(effective_text, title)
     return {
         "content": scraped_text,
-        "flashcards": materials["flashcards"],
-        "quiz": materials["quiz"]
+        "flashcards": [],
+        "quiz": []
     }
 
 class TextPayload(BaseModel):
@@ -1094,10 +1196,9 @@ async def process_text(payload: TextPayload):
         )
         conn.close()
 
-    materials = generate_study_materials(effective_text, "Pasted Notes")
     return {
-        "flashcards": materials["flashcards"],
-        "quiz": materials["quiz"]
+        "flashcards": [],
+        "quiz": []
     }
 
 class ResearchPayload(BaseModel):
@@ -1141,11 +1242,10 @@ Write in rich Markdown with clear headings (H2, H3), bullet points, and key take
         )
         conn.close()
 
-    materials = generate_study_materials(report, payload.topic)
     return {
         "content": report,
-        "flashcards": materials["flashcards"],
-        "quiz": materials["quiz"]
+        "flashcards": [],
+        "quiz": []
     }
 
 # -------------------------------------------------------------
@@ -1684,6 +1784,142 @@ Context:
 
         return {"briefing_doc": briefing_markdown}
 
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if conn:
+            conn.close()
+
+# ============================================================
+# API ENDPOINTS: ON-DEMAND ACTIVE RECALL FLASHCARDS
+# ============================================================
+class FlashcardGeneratePayload(BaseModel):
+    item_id: str
+    topic: Optional[str] = ""
+    count: int = 10
+    profile_id: Optional[str] = None
+
+@app.post("/generate-flashcards")
+@traceable(run_type="chain", name="LearnX Grounded Flashcard Synthesis")
+async def generate_flashcards_endpoint(payload: FlashcardGeneratePayload):
+    validate_uuid_string(payload.item_id)
+    conn = get_db_connection()
+    if not conn:
+        raise HTTPException(status_code=500, detail="Database connection failed")
+
+    try:
+        item_ids = [x.strip() for x in payload.item_id.split(",") if x.strip() and not x.startswith("default")]
+        if not item_ids:
+            raise HTTPException(status_code=400, detail="No valid study items specified")
+
+        cur = conn.cursor()
+        context_chunks = []
+
+        # 1. Retrieve grounded context
+        if payload.topic and payload.topic.strip():
+            try:
+                query_emb = get_embedding(payload.topic.strip())
+                matches = retrieve_pgvector_chunks(cur, query_emb, item_ids, limit=min(payload.count * 2, 20))
+                for m in matches:
+                    context_chunks.append(f"[Source: {m[2]}, Page {m[1]}]:\n{m[0]}")
+            except Exception as emb_e:
+                print(f"[Flashcards] Vector search fallback: {emb_e}")
+
+        if not context_chunks:
+            # Sample chunks across the items
+            cur.execute(
+                """
+                SELECT c.chunk_text, c.page_number, s.title
+                FROM public.document_chunks c
+                JOIN public.study_items s ON c.item_id = s.id
+                WHERE c.item_id = ANY(%s::uuid[])
+                ORDER BY c.page_number ASC, c.id ASC
+                LIMIT %s
+                """,
+                (item_ids, min(payload.count * 2, 30))
+            )
+            rows = cur.fetchall()
+            for r in rows:
+                context_chunks.append(f"[Source: {r[2]}, Page {r[1]}]:\n{r[0]}")
+
+        if not context_chunks:
+            # Fallback to study_items content
+            cur.execute("SELECT content, title FROM public.study_items WHERE id = ANY(%s::uuid[])", (item_ids,))
+            i_rows = cur.fetchall()
+            for ir in i_rows:
+                if ir[0]:
+                    context_chunks.append(f"[{ir[1]}]:\n{ir[0][:4000]}")
+
+        cur.close()
+
+        context_text = "\n\n".join(context_chunks[:25])
+        if not context_text.strip():
+            context_text = f"Study material regarding {payload.topic or 'the uploaded documents'}."
+
+        num_cards = min(max(payload.count, 3), 35)
+        topic_clause = f"Focus strictly on the concept or topic: '{payload.topic}'." if payload.topic else "Extract key concepts, definitions, formulas, and critical insights from across the materials."
+
+        prompt = f"""You are an elite academic tutor creating active-recall study flashcards.
+{topic_clause}
+
+Source Context:
+{context_text[:12000]}
+
+Generate EXACTLY {num_cards} high-impact flashcards.
+Respond STRICTLY in valid JSON matching this schema:
+{{
+  "flashcards": [
+    {{
+      "question": "Clear, concise active recall question or prompt",
+      "answer": "Accurate, well-explained answer",
+      "hint": "Brief memory clue or keyword"
+    }}
+  ]
+}}"""
+
+        flashcards = []
+        try:
+            reply = call_llm(prompt, json_mode=True, timeout=35)
+            match = re.search(r'\{.*\}', reply, re.DOTALL)
+            if match:
+                parsed = json.loads(match.group(0))
+                flashcards = parsed.get("flashcards", [])
+        except Exception as e:
+            print(f"[WARNING] Flashcard LLM generation failed: {e}")
+
+        if not flashcards:
+            # Fallback generation
+            words = re.findall(r'\b[A-Z][a-zA-Z]{3,}\b', context_text)
+            unique_words = list(dict.fromkeys(words))[:num_cards]
+            for w in unique_words:
+                flashcards.append({
+                    "question": f"Define and explain the significance of {w}",
+                    "answer": f"Core concept identified in study materials regarding {w}.",
+                    "hint": f"Key concept from {payload.topic or 'the text'}"
+                })
+
+        # Save to database if table exists
+        try:
+            cur = conn.cursor()
+            primary_id = item_ids[0]
+            card_data = [(primary_id, f["question"], f["answer"], f.get("hint", "")) for f in flashcards]
+            execute_values(
+                cur,
+                """
+                INSERT INTO public.flashcards (item_id, question, answer, hint)
+                VALUES %s
+                """,
+                card_data,
+                template="(%s::uuid, %s, %s, %s)"
+            )
+            conn.commit()
+            cur.close()
+        except Exception as dbe:
+            print(f"[WARNING] Could not save flashcards to DB: {dbe}")
+            if conn:
+                conn.rollback()
+
+        return {"flashcards": flashcards, "count": len(flashcards)}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     finally:
