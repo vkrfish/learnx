@@ -278,15 +278,17 @@ export default function DashboardPage() {
             setSelectedSourceIds(srcList.map(s => s.id));
           }
 
-          // Fetch active notebook detail (with chat history, notes, etc.)
-          const nbDetailRes = await fetchWithAuth(`${API_BASE_URL}/api/items/${activeNotebookId}`);
-          if (nbDetailRes.ok) {
-            const nbDetail = await nbDetailRes.json();
-            setActiveNotebook(nbDetail);
-          } else {
-            const currentNb = nbs.find((n) => n.id === activeNotebookId);
-            if (currentNb) setActiveNotebook(currentNb);
-          }
+          // Immediately sync active notebook from lightweight list (0ms delay)
+          const currentNb = nbs.find((n) => n.id === activeNotebookId);
+          if (currentNb) setActiveNotebook((curr) => curr?.id === activeNotebookId && curr.chatHistory?.length ? curr : currentNb);
+
+          // Asynchronously update active notebook detail in background without blocking UI
+          fetchWithAuth(`${API_BASE_URL}/api/items/${activeNotebookId}`).then(async (nbDetailRes) => {
+            if (nbDetailRes.ok) {
+              const nbDetail = await nbDetailRes.json();
+              setActiveNotebook(nbDetail);
+            }
+          }).catch(() => {});
         }
 
         if (isChangeMode) toast.success("Connected to PostgreSQL Gateway Backend!");
@@ -438,7 +440,7 @@ export default function DashboardPage() {
     }, 150);
   };
 
-  // Create notebook
+  // Create notebook (INSTANT OPTIMISTIC CREATION)
   const onCreateNotebook = async () => {
     const funnyTitles = [
       "Midterm Crisis Survival Kit 😭",
@@ -451,58 +453,63 @@ export default function DashboardPage() {
     const finalTitle =
       newNotebookTitle.trim() || funnyTitles[Math.floor(Math.random() * funnyTitles.length)];
 
+    const tempId = crypto.randomUUID();
+    const optimisticNb: StudyItem = {
+      id: tempId,
+      title: finalTitle,
+      createdAt: new Date().toISOString(),
+      kind: "notebook",
+      content: "",
+      notes: "Welcome to your private study workspace! Add sources on the left checklist to get started.",
+      flashcards: [],
+      quiz: [],
+      chatHistory: [
+        {
+          role: "assistant",
+          content:
+            "Hi! This is your new study notebook. Ingest some sources on the left checklist, select them to add them to my knowledge base, and let's get cramming!",
+        },
+      ],
+    };
+
+    // INSTANT OPTIMISTIC TRANSITION: 0ms latency
+    setNotebooks((prev) => [optimisticNb, ...prev]);
+    setActiveNotebookId(tempId);
+    setActiveNotebook(optimisticNb);
+    setSelectedSourceIds([]);
+    setSources([]);
+    setShowCreateDialog(false);
+    setNewNotebookTitle("");
+    toast.success(`Created Notebook: ${finalTitle}`);
+
     if (useRealBackend && !backendOffline) {
-      try {
-        const res = await fetchWithAuth(`${API_BASE_URL}/api/notebooks`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ title: finalTitle }),
+      fetchWithAuth(`${API_BASE_URL}/api/notebooks`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: finalTitle }),
+      })
+        .then(async (res) => {
+          if (!res.ok) throw new Error("Create failed");
+          const data = await res.json();
+          // Replace temporary UUID with persisted DB ID smoothly
+          setActiveNotebookId((curr) => (curr === tempId ? data.id : curr));
+          setActiveNotebook((curr) => (curr && curr.id === tempId ? { ...curr, id: data.id } : curr));
+          setNotebooks((prev) => prev.map((nb) => (nb.id === tempId ? { ...nb, id: data.id } : nb)));
+        })
+        .catch((e) => {
+          console.error("Optimistic notebook create failed:", e);
+          setNotebooks((prev) => prev.filter((nb) => nb.id !== tempId));
+          toast.error("Could not write to Postgres DB.");
         });
-        if (!res.ok) throw new Error("Create failed");
-        const data = await res.json();
-        setActiveNotebookId(data.id);
-        setSelectedSourceIds([]);
-        setSources([]);
-        setShowCreateDialog(false);
-        setNewNotebookTitle("");
-        toast.success(`Created Notebook: ${finalTitle}`);
-        fetchItems();
-      } catch (e) {
-        toast.error("Could not write to Postgres DB.");
-      }
     } else {
       const allItems = localStorage.getItem("ultra_learn_items")
         ? JSON.parse(localStorage.getItem("ultra_learn_items")!)
         : [];
-      const newNb: StudyItem = {
-        id: crypto.randomUUID(),
-        title: finalTitle,
-        createdAt: new Date().toISOString(),
-        kind: "notebook",
-        content: "",
-        notes: "",
-        flashcards: [],
-        quiz: [],
-        chatHistory: [
-          {
-            role: "assistant",
-            content:
-              "Hi! This is your new study notebook. Ingest some sources on the left checklist, select them to add them to my knowledge base, and let's get cramming!",
-          },
-        ],
-      };
-      const updated = [newNb, ...allItems];
-      saveLocalItems(updated);
-      setActiveNotebookId(newNb.id);
-      setSelectedSourceIds([]);
-      setSources([]);
-      setShowCreateDialog(false);
-      setNewNotebookTitle("");
-      toast.success(`Mock Created Notebook: ${finalTitle}`);
+      saveLocalItems([optimisticNb, ...allItems]);
     }
   };
 
-  // Delete notebook
+  // Delete notebook (INSTANT OPTIMISTIC DELETION)
   const onDeleteNotebook = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     const confirmed = confirm(
@@ -510,19 +517,23 @@ export default function DashboardPage() {
     );
     if (!confirmed) return;
 
+    // OPTIMISTIC: remove notebook from state immediately (0ms lag)
+    const prevNbs = notebooks;
+    setNotebooks((prev) => prev.filter((nb) => nb.id !== id));
+    if (activeNotebookId === id) {
+      setActiveNotebookId(null);
+      setActiveNotebook(null);
+    }
+    toast.success("Notebook deleted.");
+
     if (useRealBackend && !backendOffline) {
       try {
         const res = await fetchWithAuth(`${API_BASE_URL}/api/notebooks/${id}`, {
           method: "DELETE",
         });
         if (!res.ok) throw new Error("Delete failed");
-        if (activeNotebookId === id) {
-          setActiveNotebookId(null);
-          setActiveNotebook(null);
-        }
-        fetchItems();
-        toast.success("Notebook deleted.");
       } catch (e) {
+        setNotebooks(prevNbs);
         toast.error("Failed to delete notebook.");
       }
     } else {
@@ -532,11 +543,6 @@ export default function DashboardPage() {
       // Delete notebook AND all sources under it
       const updated = allItems.filter((it) => it.id !== id && it.notebookId !== id);
       saveLocalItems(updated);
-      if (activeNotebookId === id) {
-        setActiveNotebookId(null);
-        setActiveNotebook(null);
-      }
-      toast.success("Deleted from LocalStorage");
     }
   };
 
@@ -1036,10 +1042,16 @@ export default function DashboardPage() {
     });
   };
 
-  // Delete a source from notebook
+  // Delete a source from notebook (INSTANT OPTIMISTIC DELETION)
   const onDeleteSource = async (id: string) => {
     const confirmed = confirm("Are you sure you want to delete this source?");
     if (!confirmed) return;
+
+    // OPTIMISTIC: immediately remove from sources list and selected IDs (0ms lag)
+    const prevSources = sources;
+    setSources((prev) => prev.filter((s) => s.id !== id));
+    setSelectedSourceIds((prev) => prev.filter((i) => i !== id));
+    toast.success("Source deleted");
 
     if (useRealBackend && !backendOffline) {
       try {
@@ -1047,10 +1059,8 @@ export default function DashboardPage() {
           method: "DELETE",
         });
         if (!res.ok) throw new Error("Delete failed");
-        toast.success("Source deleted");
-        setSelectedSourceIds((prev) => prev.filter((i) => i !== id));
-        fetchItems();
       } catch (e) {
+        setSources(prevSources);
         toast.error("Failed to delete source.");
       }
     } else {
@@ -1059,8 +1069,6 @@ export default function DashboardPage() {
         : [];
       const updated = allItems.filter((it) => it.id !== id);
       saveLocalItems(updated);
-      setSelectedSourceIds((prev) => prev.filter((i) => i !== id));
-      toast.success("Deleted from LocalStorage");
     }
   };
 

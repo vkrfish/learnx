@@ -1571,9 +1571,14 @@ Standalone Search Query:"""
 
     # Fallback heuristic if LLM timed out or returned something too short / affirmative
     if is_affirmative and last_assistant_msg:
-        match = re.search(r'(?:such as|like|including|explore|about|regarding)\s+([^.?!]+)', last_assistant_msg, re.IGNORECASE)
+        # Match topic list indicators first
+        match = re.search(r'(?:such as|including|for example|e\.g\.)\s+([^.?!]+)', last_assistant_msg, re.IGNORECASE)
+        if not match:
+            # Match action verbs
+            match = re.search(r'(?:explore|review|analyze|learn about|discuss|examine|break down)\s+([^.?!]+)', last_assistant_msg, re.IGNORECASE)
         if match:
-            return f"Detailed breakdown of {match.group(1).strip()} from document"
+            clean_topics = re.sub(r'^(?:to\s+explore\s+|any\s+other\s+details\s+from\s+this\s+(?:resume|document|source|materials?),?\s*(?:such\s+as\s+)?)', '', match.group(1).strip(), flags=re.IGNORECASE)
+            return f"Detailed breakdown of {clean_topics.strip()} from document"
         return f"Comprehensive details and analysis of topics mentioned in: {last_assistant_msg[:120]}"
 
     return question
@@ -1739,17 +1744,46 @@ PRIMARY OBJECTIVES:
 2. Directly answer the user's question using the provided source context. When multiple resources (such as books, documents, and YouTube video lectures) are selected, synthesize information across ALL active materials seamlessly.
 3. CONVERSATIONAL CONTINUITY & AFFIRMATIVE FOLLOW-UPS (STRICT RULE):
    - When the user responds with an affirmative confirmation (such as "yes", "sure", "go ahead", "tell me more", "ok", "please do", "continue") to an offer, question, or list of topics proposed in the previous conversation:
-     * NEVER respond with "It looks like your response was just 'yes'" or ask what they want again!
+     * NEVER respond with "It looks like your response was just 'yes'" or ask what they want again or say "How can I help you next?"!
      * DO NOT deflect or pause.
      * IMMEDIATELY deliver the full, thorough, detailed breakdown of the topics, details, or questions offered in the preceding turn (e.g. candidate education, technical skills, projects, architectures, next chapters, or deeper analysis).
      * Provide a well-formatted, complete response with bullet points, bold section headers, and clear structure.
 4. IMPORTANT CITATION RULE: Whenever citing facts from the source, append an inline citation in the format `[Page X]` for documents, `[Slide X]` for presentations, or `[MM:SS]` for videos (e.g., "[Page 1]").
 5. End with a friendly, conversational follow-up inviting further exploration once the breakdown is delivered."""
 
-        if search_query != payload.question:
-            prompt_instruction = f"""User Follow-up Input: "{payload.question}"
-Resolved User Request: {search_query}
-Action: The user responded affirmatively to your previous suggestion. Immediately deliver the full, comprehensive detailed breakdown covering the requested topics ({search_query}) grounded directly in the source context."""
+        cleaned_raw_q = re.sub(r'[^a-zA-Z0-9\s]', '', payload.question.strip().lower())
+        is_user_affirmative = (
+            search_query != payload.question
+            or cleaned_raw_q in AFFIRMATIVE_CONFIRMATIONS
+            or any(cleaned_raw_q.startswith(prefix) for prefix in ("yes", "sure", "ok", "okay", "please", "continue", "tell me"))
+        )
+
+        if is_user_affirmative:
+            # If search_query was not resolved, generate a default resolution from last assistant message
+            if search_query == payload.question:
+                last_msg = ""
+                for m in reversed(payload.chat_history):
+                    role = getattr(m, 'role', '') if hasattr(m, 'role') else (m.get('role', '') if isinstance(m, dict) else '')
+                    content = getattr(m, 'content', '') if hasattr(m, 'content') else (m.get('content', '') if isinstance(m, dict) else str(m))
+                    if role in ('assistant', 'model', 'bot') and content.strip():
+                        last_msg = content.strip()
+                        break
+                match = re.search(r'(?:such as|including|for example|e\.g\.)\s+([^.?!]+)', last_msg, re.IGNORECASE)
+                if not match:
+                    match = re.search(r'(?:explore|review|analyze|learn about|discuss|examine|break down)\s+([^.?!]+)', last_msg, re.IGNORECASE)
+                if match:
+                    clean_topics = re.sub(r'^(?:to\s+explore\s+|any\s+other\s+details\s+from\s+this\s+(?:resume|document|source|materials?),?\s*(?:such\s+as\s+)?)', '', match.group(1).strip(), flags=re.IGNORECASE)
+                    search_query = f"Detailed breakdown of {clean_topics.strip()} from document"
+                elif last_msg:
+                    search_query = f"Detailed breakdown of topics proposed in: {last_msg[:120]}"
+                else:
+                    search_query = "Detailed comprehensive breakdown of key concepts and sections in the document"
+
+            prompt_instruction = f"""Action: The user responded affirmatively ("{payload.question}") to explore the details/topics previously offered.
+CRITICAL INSTRUCTION:
+Under NO circumstances respond with "It looks like your response was just 'yes'" or ask what they want to see.
+IMMEDIATELY and directly present a thorough, comprehensive, beautifully structured deep-dive covering all requested topics: {search_query}.
+Ground every single section in the provided context below with page citations."""
         else:
             prompt_instruction = f"Question: {payload.question}"
 

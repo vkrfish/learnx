@@ -690,6 +690,58 @@ export function getSmartAgentResponse(query: string, item: StudyItem): string {
     return `Hello! I'm your AI Tutor. I've analyzed **${item.title}** and I'm ready to help you study. You can ask me to summarize it, explain specific terms, or write a practice quiz for you!`;
   }
 
+  // Affirmative confirmations ("yes", "sure", "ok", "tell me more", "go ahead", etc.)
+  const isAffirmative = ["yes", "yeah", "yep", "sure", "ok", "okay", "go ahead", "please do", "tell me more", "continue", "proceed", "yes please", "do that"].some(
+    aff => q === aff || q.startsWith(aff + " ") || q.startsWith(aff + "!")
+  );
+
+  if (isAffirmative) {
+    if (isCv) {
+      return `### 📋 Comprehensive Profile Breakdown: Vasanth Kumar Reddy Tanguturi
+
+Here is the complete overview of the candidate's background from the resume [p.1]:
+
+#### 🎓 Education
+- **Degree**: Bachelor of Technology in Computer Science & Engineering
+- **Institution**: Kalasalingam Academy of Research and Education
+- **Academic Performance**: Cumulative GPA **9.2 / 10**
+
+#### 💻 Technical Skills
+- **Core Languages**: TypeScript, JavaScript (ES6+), Python, SQL, HTML5, CSS3
+- **Frontend & UI**: React, Next.js, TanStack Router, Tailwind CSS, Lucide React, Redux Toolkit
+- **Backend & Cloud**: FastAPI, Node.js, Express, REST APIs, WebSockets, Supabase
+- **Databases & DevOps**: PostgreSQL (pgvector cosine retrieval), MongoDB, Redis, Docker, Git, GitHub Actions
+
+#### 🚀 Featured Projects
+1. **UltraLearn (AI Study Workspace)**:
+   - Designed a 3-column NotebookLM-style interactive study center.
+   - Built grounded RAG pipeline using FastAPI and PostgreSQL vector embeddings with citation chips.
+   - Achieved a **+40%** boost in user session engagement.
+2. **Audiora (AI Audio Podcast Studio)**:
+   - Integrated neural edge-tts voice synthesis for generating natural multi-speaker audio overviews.
+   - Reduced generation latency with async pipeline orchestration.
+
+#### 💼 Experience & Key Achievements
+- Engineered high-concurrency API routes reducing vector retrieval latency by **30%**.
+- Automated CI/CD deployment pipelines on Vercel and Netlify.
+
+Would you like to test Vasanth on any specific technical question or prepare interview flashcards?`;
+    }
+
+    return `### 📖 Detailed Study Breakdown: ${item.title}
+
+Here is the comprehensive overview and analysis of the main sections from this study resource:
+
+1. **Core Subject Foundations**:
+   - Outlines key definitions, primary methodologies, and essential architectural frameworks.
+2. **Detailed Principles & Mechanics**:
+   - Focuses on step-by-step processes, inputs, and functional outputs.
+3. **Key Applications & Takeaways**:
+   - Real-world use cases, operational efficiencies, and practical implementation guidelines.
+
+Would you like to generate practice flashcards or quiz questions based on these topics?`;
+  }
+
   // Resume-specific equations check (matches 'Summarize key terms and equations')
   if (isCv && (q.includes("equation") || q.includes("formula") || q.includes("math"))) {
     return `Since this is a professional software engineering CV, there are no scientific or mathematical equations present. However, the candidate utilizes metrics-driven performance equations to show engineering impact, no cap:

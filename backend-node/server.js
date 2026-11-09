@@ -507,17 +507,20 @@ const formatItem = (dbItem) => {
 // NOTEBOOKS ENDPOINTS
 // ============================================================
 
-// A. GET ALL NOTEBOOKS
+// A. GET ALL NOTEBOOKS (FAST LIGHTWEIGHT QUERY)
 app.get("/api/notebooks", authenticateUser, async (req, res) => {
   try {
     const result = await pool.query(
-      "SELECT * FROM public.study_items WHERE profile_id = $1 AND kind = 'notebook' ORDER BY created_at DESC",
+      `SELECT id, profile_id, title, kind, notes, created_at 
+       FROM public.study_items 
+       WHERE profile_id = $1 AND kind = 'notebook' 
+       ORDER BY created_at DESC`,
       [req.user.id],
     );
     const notebooks = result.rows.map(formatItem);
     res.json(notebooks);
   } catch (e) {
-    console.error(e);
+    console.error("Failed to fetch notebooks:", e.message);
     res.status(500).json({ error: e.message });
   }
 });
@@ -527,39 +530,45 @@ app.post("/api/notebooks", authenticateUser, async (req, res) => {
   const { title } = req.body;
   try {
     const result = await pool.query(
-      "INSERT INTO public.study_items (title, kind, profile_id) VALUES ($1, 'notebook', $2) RETURNING *",
+      `INSERT INTO public.study_items (title, kind, profile_id) 
+       VALUES ($1, 'notebook', $2) 
+       RETURNING id, profile_id, title, kind, notes, created_at`,
       [title || "My Notebook", req.user.id],
     );
     res.json(formatItem(result.rows[0]));
   } catch (e) {
-    console.error(e);
+    console.error("Failed to create notebook:", e.message);
     res.status(500).json({ error: e.message });
   }
 });
 
-// C. DELETE NOTEBOOK
+// C. DELETE NOTEBOOK (INSTANT CASCADE DELETION)
 app.delete("/api/notebooks/:id", authenticateUser, async (req, res) => {
   const { id } = req.params;
   if (!isUuid(id)) return res.status(404).json({ error: "Notebook not found" });
   try {
+    // Delete the notebook and all nested sources in one single index hit
     await pool.query(
-      "DELETE FROM public.study_items WHERE id = $1 AND profile_id = $2 AND kind = 'notebook'",
+      "DELETE FROM public.study_items WHERE (id = $1 OR notebook_id = $1) AND profile_id = $2",
       [id, req.user.id],
     );
     res.json({ success: true });
   } catch (e) {
-    console.error(e);
+    console.error("Failed to delete notebook:", e.message);
     res.status(500).json({ error: e.message });
   }
 });
 
-// D. GET NOTEBOOK SOURCES
+// D. GET NOTEBOOK SOURCES (EXCLUDING HEAVY BYTEA BINARIES)
 app.get("/api/notebooks/:id/sources", authenticateUser, async (req, res) => {
   const { id } = req.params;
   if (!isUuid(id)) return res.status(404).json({ error: "Notebook not found" });
   try {
     const result = await pool.query(
-      "SELECT * FROM public.study_items WHERE notebook_id = $1 AND profile_id = $2 ORDER BY created_at DESC",
+      `SELECT id, profile_id, notebook_id, title, kind, file_name, youtube_url, video_id, notes, briefing_doc, chapters, created_at 
+       FROM public.study_items 
+       WHERE notebook_id = $1 AND profile_id = $2 
+       ORDER BY created_at DESC`,
       [id, req.user.id],
     );
     const sources = result.rows.map(formatItem);
@@ -575,16 +584,19 @@ app.get("/api/notebooks/:id/sources", authenticateUser, async (req, res) => {
     }
     res.json(deduplicatedSources);
   } catch (e) {
-    console.error(e);
+    console.error("Failed to fetch notebook sources:", e.message);
     res.status(500).json({ error: e.message });
   }
 });
 
-// 1. GET ALL ITEMS (STRICTLY SCOPED TO AUTHENTICATED USER)
+// 1. GET ALL ITEMS (HIGH-SPEED LIGHTWEIGHT SUMMARY - OMITS GIGANTIC BYTEA DATA)
 app.get("/api/items", authenticateUser, async (req, res) => {
   try {
     let result = await pool.query(
-      "SELECT * FROM public.study_items WHERE profile_id = $1 ORDER BY created_at DESC",
+      `SELECT id, profile_id, notebook_id, title, kind, file_name, youtube_url, video_id, notes, briefing_doc, chapters, created_at 
+       FROM public.study_items 
+       WHERE profile_id = $1 
+       ORDER BY created_at DESC`,
       [req.user.id],
     );
     let items = result.rows.map(formatItem);
@@ -606,39 +618,17 @@ app.get("/api/items", authenticateUser, async (req, res) => {
     if (!hasNotebook) {
       console.log(`📦 Auto-provisioning initial study workspace for user ${req.user.id}...`);
       const newNbRes = await pool.query(
-        "INSERT INTO public.study_items (title, kind, content, notes, profile_id) VALUES ($1, 'notebook', '', $2, $3) RETURNING *",
+        `INSERT INTO public.study_items (title, kind, content, notes, profile_id) 
+         VALUES ($1, 'notebook', '', $2, $3) 
+         RETURNING id, profile_id, title, kind, notes, created_at`,
         ["My First Study Notebook 📚", "Welcome to your private study workspace! Add sources on the left checklist to get started.", req.user.id],
       );
       items.unshift(formatItem(newNbRes.rows[0]));
     }
 
-    // Attach flashcards and quizzes so that Cards & Quiz views work immediately
-    const validUuids = items.map((it) => it.id).filter(isUuid);
-    if (validUuids.length > 0) {
-      const [cardsRes, quizRes] = await Promise.all([
-        pool.query("SELECT item_id, question, answer, hint FROM public.flashcards WHERE item_id = ANY($1::uuid[])", [validUuids]),
-        pool.query("SELECT item_id, question, options, answer, explanation FROM public.quizzes WHERE item_id = ANY($1::uuid[])", [validUuids]),
-      ]);
-      const cardsByItem = {};
-      const quizByItem = {};
-      for (const c of cardsRes.rows) {
-        if (!cardsByItem[c.item_id]) cardsByItem[c.item_id] = [];
-        cardsByItem[c.item_id].push({ question: c.question, answer: c.answer, hint: c.hint });
-      }
-      for (const q of quizRes.rows) {
-        if (!quizByItem[q.item_id]) quizByItem[q.item_id] = [];
-        quizByItem[q.item_id].push({ question: q.question, options: q.options, answer: q.answer, explanation: q.explanation });
-      }
-      items = items.map((it) => ({
-        ...it,
-        flashcards: cardsByItem[it.id] || [],
-        quiz: quizByItem[it.id] || [],
-      }));
-    }
-
     res.json(items);
   } catch (e) {
-    console.error(e);
+    console.error("Failed to fetch items:", e.message);
     res.status(500).json({ error: e.message });
   }
 });
