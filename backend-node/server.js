@@ -760,10 +760,14 @@ app.post("/api/items/file", authenticateUser, upload.single("file"), async (req,
       timeout: 90000,
     });
 
-    const { content, flashcards, quiz } = fastApiRes.data;
+    const { content, flashcards, quiz, metrics, gemini_file_uri } = fastApiRes.data;
 
-    // 3. Update Item Content
-    await pool.query("UPDATE public.study_items SET content = $1 WHERE id = $2", [content, itemId]);
+    // 3. Update Item Content & Gemini File URI if present
+    if (gemini_file_uri) {
+      await pool.query("UPDATE public.study_items SET content = $1, file_name = $2 WHERE id = $3", [content, gemini_file_uri, itemId]);
+    } else {
+      await pool.query("UPDATE public.study_items SET content = $1 WHERE id = $2", [content, itemId]);
+    }
 
     // 4. Insert Flashcards
     for (const card of flashcards) {
@@ -808,7 +812,7 @@ app.post("/api/items/file", authenticateUser, upload.single("file"), async (req,
       );
     }
 
-    res.json({ id: itemId });
+    res.json({ id: itemId, metrics: metrics || {} });
   } catch (e) {
     const errMsg = e.response && e.response.data ? JSON.stringify(e.response.data) : e.message;
     console.error("❌ File ingest failed:", errMsg);
@@ -923,7 +927,7 @@ app.post("/api/items/youtube", authenticateUser, async (req, res) => {
       );
     }
 
-    res.json({ id: itemId });
+    res.json({ id: itemId, metrics: metrics || {} });
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: e.message });
@@ -963,7 +967,7 @@ app.post("/api/items/website", authenticateUser, async (req, res) => {
       );
     }
 
-    res.json({ id: itemId });
+    res.json({ id: itemId, metrics: metrics || {} });
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: e.message });
@@ -1001,7 +1005,7 @@ app.post("/api/items/text", authenticateUser, async (req, res) => {
       );
     }
 
-    res.json({ id: itemId });
+    res.json({ id: itemId, metrics: metrics || {} });
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: e.message });
@@ -1044,7 +1048,7 @@ app.post("/api/items/research", authenticateUser, async (req, res) => {
       );
     }
 
-    res.json({ id: itemId });
+    res.json({ id: itemId, metrics: metrics || {} });
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: e.message });

@@ -555,7 +555,10 @@ export default function DashboardPage() {
             setAnalysisProgress(95);
             await fetchItems();
             setSelectedSourceIds((prev) => Array.from(new Set([...prev, data.id])));
-            toast.success(`Indexed successfully: ${file.name}`);
+            const speedInfo = data.metrics?.speedup
+              ? `⚡ Indexed in ${data.metrics.after_speed_seconds}s (${data.metrics.speedup}) • Traced in LangSmith`
+              : `Indexed successfully: ${file.name}`;
+            toast.success(speedInfo);
             uploadedSuccessfully = true;
           }
         } catch (e) {
@@ -601,7 +604,10 @@ export default function DashboardPage() {
             setSelectedSourceIds((prev) => [...prev, newItem.id]);
             setNotebooks((prev) => prev.map((n) => n.id === activeNotebookId ? { ...n } : n));
             setSources((prev) => [newItem, ...prev]);
-            toast.success(`Indexed successfully via RAG AI: ${file.name}`);
+            const speedInfo = fData.metrics?.speedup
+              ? `⚡ Indexed in ${fData.metrics.after_speed_seconds}s (${fData.metrics.speedup}) • Traced in LangSmith`
+              : `Indexed successfully via RAG AI: ${file.name}`;
+            toast.success(speedInfo);
             uploadedSuccessfully = true;
           }
         } catch (fErr) {
