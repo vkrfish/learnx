@@ -1360,7 +1360,7 @@ export default function DashboardPage() {
                           year: "numeric",
                         })}
                       </span>
-                      <span className="font-mono text-[9px] uppercase tracking-wider text-primary bg-primary/10 px-1.5 py-0.5 rounded border border-primary/20">
+                      <span className="font-mono text-[10px] uppercase tracking-wider text-primary bg-primary/10 px-1.5 py-0.5 rounded border border-primary/20">
                         Workspace
                       </span>
                     </div>

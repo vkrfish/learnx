@@ -99,11 +99,6 @@ function Hero() {
   return (
     <section className="relative mx-auto max-w-[1200px] px-6 pt-16 pb-16 text-center">
       <div className="relative mx-auto max-w-3xl pt-8">
-        <div className="mx-auto mb-5 inline-flex items-center gap-2 rounded-full border border-border bg-secondary/50 px-3.5 py-1 text-xs font-medium text-muted-foreground">
-          <span className="flex h-1.5 w-1.5 rounded-full bg-primary" />
-          <span>Grounded Study Sessions & Spaced Repetition</span>
-        </div>
-
         <h1 className="font-display text-4xl font-bold tracking-tight text-foreground sm:text-6xl lg:text-7xl leading-[1.08]">
           Master complex materials with intelligent active recall.
         </h1>
@@ -236,7 +231,7 @@ function Hero() {
               </div>
 
               <div className="rounded-lg border border-border bg-card p-4 text-left space-y-3">
-                <span className="text-[9px] font-mono font-semibold uppercase text-primary bg-primary/10 border border-primary/20 px-2 py-0.5 rounded inline-block">
+                <span className="text-[10px] font-mono font-semibold uppercase text-primary bg-primary/10 border border-primary/20 px-2 py-0.5 rounded inline-block">
                   Mechanisms of Respiration
                 </span>
                 <p className="text-xs font-medium text-foreground leading-snug">
@@ -252,13 +247,13 @@ function Hero() {
             <div className="grid grid-cols-2 gap-2 mt-4 text-center">
               <div className="rounded border border-border bg-card/60 p-2">
                 <span className="text-base font-bold text-foreground">92%</span>
-                <p className="text-[9px] text-muted-foreground uppercase tracking-wider mt-0.5">
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wider mt-0.5">
                   Retention Rate
                 </p>
               </div>
               <div className="rounded border border-border bg-card/60 p-2">
                 <span className="text-base font-bold text-primary">18 Cards</span>
-                <p className="text-[9px] text-muted-foreground uppercase tracking-wider mt-0.5">
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wider mt-0.5">
                   Active Set
                 </p>
               </div>
