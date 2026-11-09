@@ -52,3 +52,10 @@ check_api.py
 # Cloned reference projects
 reverse engineer/
 taste-skill/
+
+# Skills CLI agent artifacts
+.agent/
+.codex/
+.devin/
+.opencode/
+skills-lock.json
