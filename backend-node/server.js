@@ -737,7 +737,7 @@ app.put("/api/items/:id/notes", authenticateUser, verifyItemOwnership, async (re
   }
 });
 
-// 5. UPLOAD & INDEX PDF (FORWARD TO FASTAPI FOR RAG)
+// 5. UPLOAD & INDEX DOCUMENT (PDF / DOCX / PPTX / TXT / MD) (FORWARD TO FASTAPI FOR RAG)
 app.post("/api/items/file", authenticateUser, upload.single("file"), async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: "No file uploaded" });
@@ -745,8 +745,16 @@ app.post("/api/items/file", authenticateUser, upload.single("file"), async (req,
 
   try {
     const today = new Date();
-    const dateStr = `${today.getMonth() + 1}/${today.getDate()}/${today.getFullYear()}`;
-    const title = `Learning Session - ${dateStr}`;
+    const cleanTitle = req.file.originalname.replace(/\.[^/.]+$/, "").replace(/[_-]/g, " ");
+    const ext = path.extname(req.file.originalname).toLowerCase();
+    let fileKind = "pdf";
+    if (ext === ".pptx" || ext === ".ppt") {
+      fileKind = "presentation";
+    } else if (ext === ".docx" || ext === ".doc") {
+      fileKind = "doc";
+    } else if (ext === ".txt" || ext === ".md") {
+      fileKind = "text";
+    }
 
     // 1. Create Study Item with profile_id and file_data
     let notebookId = req.body.notebook_id || req.body.notebookId || null;
@@ -768,30 +776,30 @@ app.post("/api/items/file", authenticateUser, upload.single("file"), async (req,
     if (notebookId) {
       existingItemRes = await pool.query(
         "SELECT id FROM public.study_items WHERE (file_name = $1 OR title = $2) AND profile_id = $3 AND notebook_id = $4 LIMIT 1",
-        [req.file.originalname, req.file.originalname.split(".")[0], req.user.id, notebookId]
+        [req.file.originalname, cleanTitle, req.user.id, notebookId]
       );
     } else {
       existingItemRes = await pool.query(
         "SELECT id FROM public.study_items WHERE (file_name = $1 OR title = $2) AND profile_id = $3 LIMIT 1",
-        [req.file.originalname, req.file.originalname.split(".")[0], req.user.id]
+        [req.file.originalname, cleanTitle, req.user.id]
       );
     }
 
     if (existingItemRes && existingItemRes.rows.length > 0) {
       itemId = existingItemRes.rows[0].id;
       await pool.query(
-        "UPDATE public.study_items SET file_data = $1, updated_at = NOW() WHERE id = $2",
-        [req.file.buffer, itemId]
+        "UPDATE public.study_items SET file_data = $1, kind = $2, updated_at = NOW() WHERE id = $3",
+        [req.file.buffer, fileKind, itemId]
       );
     } else if (itemId) {
       await pool.query(
-        "INSERT INTO public.study_items (id, title, kind, file_name, profile_id, file_data, notebook_id) VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (id) DO UPDATE SET file_data = $6",
-        [itemId, title, "pdf", req.file.originalname, req.user.id, req.file.buffer, notebookId],
+        "INSERT INTO public.study_items (id, title, kind, file_name, profile_id, file_data, notebook_id) VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (id) DO UPDATE SET file_data = $6, kind = $3",
+        [itemId, cleanTitle, fileKind, req.file.originalname, req.user.id, req.file.buffer, notebookId],
       );
     } else {
       const itemRes = await pool.query(
         "INSERT INTO public.study_items (title, kind, file_name, profile_id, file_data, notebook_id) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id",
-        [title, "pdf", req.file.originalname, req.user.id, req.file.buffer, notebookId],
+        [cleanTitle, fileKind, req.file.originalname, req.user.id, req.file.buffer, notebookId],
       );
       itemId = itemRes.rows[0].id;
     }
@@ -910,19 +918,42 @@ app.get("/api/items/:id/file", authenticateUser, verifyItemOwnership, async (req
 
 // 6. PROCESS YOUTUBE (FORWARD TO FASTAPI)
 app.post("/api/items/youtube", authenticateUser, async (req, res) => {
-    const { url, notebook_id, notebookId } = req.body;
-    const finalNotebookId = notebook_id || notebookId || null;
-    try {
-      const today = new Date();
-      const dateStr = `${today.getMonth() + 1}/${today.getDate()}/${today.getFullYear()}`;
-      const title = `Learning Session - ${dateStr}`;
+  const { url, notebook_id, notebookId } = req.body;
+  const finalNotebookId = notebook_id || notebookId || null;
+  try {
+    const today = new Date();
+    const dateStr = `${today.getMonth() + 1}/${today.getDate()}/${today.getFullYear()}`;
+    const defaultTitle = `YouTube Video - ${dateStr}`;
 
-      // 1. Create Study Item with profile_id
-      const itemRes = await pool.query(
-        "INSERT INTO public.study_items (title, kind, youtube_url, profile_id, notebook_id) VALUES ($1, $2, $3, $4, $5) RETURNING id",
-        [title, "youtube", url, req.user.id, finalNotebookId],
+    // Deduplicate: check if YouTube video with this URL already exists in this notebook
+    let itemId = req.body.item_id && isUuid(req.body.item_id) ? req.body.item_id : null;
+    let existingRes = null;
+    if (finalNotebookId) {
+      existingRes = await pool.query(
+        "SELECT id FROM public.study_items WHERE youtube_url = $1 AND profile_id = $2 AND notebook_id = $3 LIMIT 1",
+        [url, req.user.id, finalNotebookId]
       );
-    const itemId = itemRes.rows[0].id;
+    } else {
+      existingRes = await pool.query(
+        "SELECT id FROM public.study_items WHERE youtube_url = $1 AND profile_id = $2 LIMIT 1",
+        [url, req.user.id]
+      );
+    }
+
+    if (existingRes && existingRes.rows.length > 0) {
+      itemId = existingRes.rows[0].id;
+    } else if (itemId) {
+      await pool.query(
+        "INSERT INTO public.study_items (id, title, kind, youtube_url, profile_id, notebook_id) VALUES ($1, $2, 'youtube', $3, $4, $5) ON CONFLICT (id) DO NOTHING",
+        [itemId, defaultTitle, url, req.user.id, finalNotebookId]
+      );
+    } else {
+      const itemRes = await pool.query(
+        "INSERT INTO public.study_items (title, kind, youtube_url, profile_id, notebook_id) VALUES ($1, 'youtube', $2, $3, $4) RETURNING id",
+        [defaultTitle, url, req.user.id, finalNotebookId],
+      );
+      itemId = itemRes.rows[0].id;
+    }
 
     // 2. Contact FastAPI
     const fastApiRes = await axios.post(`${FASTAPI_URL}/process-youtube`, { url, item_id: itemId });
@@ -931,11 +962,11 @@ app.post("/api/items/youtube", authenticateUser, async (req, res) => {
     // 3. Update Item Content and Title
     await pool.query(
       "UPDATE public.study_items SET title = COALESCE($1, title), video_id = $2, content = $3, chapters = $4, transcript = $5 WHERE id = $6",
-      [fastApiTitle || title, video_id, content, JSON.stringify(chapters), JSON.stringify(transcript), itemId],
+      [fastApiTitle || defaultTitle, video_id, content, JSON.stringify(chapters || []), JSON.stringify(transcript || []), itemId],
     );
 
     // 4. Insert Flashcards
-    for (const card of flashcards) {
+    for (const card of (flashcards || [])) {
       await pool.query(
         "INSERT INTO public.flashcards (item_id, question, answer, hint) VALUES ($1, $2, $3, $4)",
         [itemId, card.question, card.answer, card.hint],
@@ -977,10 +1008,20 @@ app.post("/api/items/youtube", authenticateUser, async (req, res) => {
       );
     }
 
-    res.json({ id: itemId, metrics: metrics || {} });
+    res.json({
+      id: itemId,
+      title: fastApiTitle || defaultTitle,
+      video_id,
+      content,
+      chapters: chapters || [],
+      transcript: transcript || [],
+      flashcards: flashcards || [],
+      quiz: quiz || []
+    });
   } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: e.message });
+    const errMsg = e.response && e.response.data ? JSON.stringify(e.response.data) : e.message;
+    console.error("❌ YouTube ingest failed:", errMsg);
+    res.status(500).json({ error: errMsg });
   }
 });
 

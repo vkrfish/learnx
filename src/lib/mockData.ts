@@ -27,7 +27,7 @@ export interface StudyItem {
   id: string;
   title: string;
   createdAt: string;
-  kind: "pdf" | "youtube" | "website" | "text" | "research" | "notebook";
+  kind: "pdf" | "youtube" | "website" | "text" | "research" | "notebook" | "presentation" | "ppt" | "doc" | "docx";
   notebookId?: string; // Links sources to their parent notebook
   fileName?: string;
   content: string; // Left-panel content (scraped text, plain text, research markdown)

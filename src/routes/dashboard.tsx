@@ -552,6 +552,12 @@ export default function DashboardPage() {
     const cleanFileName = file.name;
     const cleanTitle = cleanFileName.replace(/\.[^/.]+$/, "").replace(/[_-]/g, " ");
 
+    const ext = file.name.slice(file.name.lastIndexOf(".")).toLowerCase();
+    let fileKind: "pdf" | "presentation" | "doc" | "text" = "pdf";
+    if (ext === ".pptx" || ext === ".ppt") fileKind = "presentation";
+    else if (ext === ".docx" || ext === ".doc") fileKind = "doc";
+    else if (ext === ".txt" || ext === ".md") fileKind = "text";
+
     // Close source picker immediately so user directly sees the dashboard & active notebook
     setActiveInputMode("none");
     setInputText("");
@@ -563,7 +569,7 @@ export default function DashboardPage() {
         id: tempUploadId,
         name: cleanFileName,
         progress: 25,
-        status: "Uploading & parsing document...",
+        status: `Uploading & parsing ${fileKind === "presentation" ? "slides" : "document"}...`,
       },
     ]);
 
@@ -600,7 +606,7 @@ export default function DashboardPage() {
             notebookId: activeNotebookId,
             title: cleanTitle,
             createdAt: new Date().toISOString(),
-            kind: "pdf",
+            kind: fileKind,
             fileName: cleanFileName,
             content: `Grounded knowledge indexed for ${cleanFileName}`,
             localFileUrl: blobUrl,
@@ -611,11 +617,11 @@ export default function DashboardPage() {
           };
         }
       } catch (e) {
-        console.warn("Node gateway PDF upload failed or timed out, trying direct FastAPI call...", e);
+        console.warn("Node gateway upload failed or timed out, trying direct FastAPI call...", e);
       }
     }
 
-    // 2. Direct FastAPI PDF processing fallback if Node Gateway is offline
+    // 2. Direct FastAPI document processing fallback if Node Gateway is offline
     if (!uploadedItem) {
       try {
         setUploadingSources((prev) =>
@@ -640,7 +646,7 @@ export default function DashboardPage() {
             notebookId: activeNotebookId,
             title: cleanTitle,
             createdAt: new Date().toISOString(),
-            kind: "pdf",
+            kind: fileKind,
             fileName: cleanFileName,
             content: fData.content || docData.content,
             localFileUrl: blobUrl,
@@ -660,7 +666,7 @@ export default function DashboardPage() {
           uploadedItem = newItem;
         }
       } catch (fErr) {
-        console.warn("Direct FastAPI PDF processing failed:", fErr);
+        console.warn("Direct FastAPI document processing failed:", fErr);
       }
     }
 
@@ -671,7 +677,7 @@ export default function DashboardPage() {
         notebookId: activeNotebookId,
         title: cleanTitle,
         createdAt: new Date().toISOString(),
-        kind: "pdf",
+        kind: fileKind,
         fileName: cleanFileName,
         content: docData.content,
         localFileUrl: blobUrl,
@@ -702,77 +708,140 @@ export default function DashboardPage() {
     }
   };
 
-  const onAddYoutube = () => {
+  const onAddYoutube = async () => {
     if (!inputText.trim() || !activeNotebookId) {
       toast.error("Please enter a YouTube video URL");
       return;
     }
 
     const url = inputText.trim();
+    // Close input modal immediately
+    setActiveInputMode("none");
+    setInputText("");
+
+    const tempUploadId = crypto.randomUUID();
     const isInternship =
       url.includes("6PZX") || url.includes("internship") || url.includes("telugu");
     const ytData = isInternship ? MOCK_YOUTUBE_INTERNSHIP : generateMockYoutubeContent(url);
 
-    const ytLogs = [
-      "📡 Connecting to YouTube API...",
-      `🎥 Fetching video details: ${url}`,
-      "🔊 Ingesting transcript tracks...",
-      "🏷️ Aligning chapters and timelines...",
-      "📚 Generating Socratic study aids...",
-      "⏳ Ingest complete!",
-    ];
+    // Add inline pending card in left column
+    setUploadingSources((prev) => [
+      ...prev.filter((u) => u.id !== tempUploadId),
+      {
+        id: tempUploadId,
+        name: ytData.title || `YouTube Video`,
+        progress: 25,
+        status: "Ingesting video transcript & chapters...",
+      },
+    ]);
 
-    runSimulatedAnalysis(ytLogs, async () => {
-      if (useRealBackend && !backendOffline) {
-        try {
-          const res = await fetchWithAuth(`${API_BASE_URL}/api/items/youtube`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ url, notebook_id: activeNotebookId }),
-          });
-          if (!res.ok) throw new Error();
+    let createdItem: StudyItem | null = null;
+
+    // 1. Try Node API Gateway
+    if (useRealBackend && !backendOffline) {
+      try {
+        setUploadingSources((prev) =>
+          prev.map((u) => u.id === tempUploadId ? { ...u, progress: 55, status: "Generating Socratic study aids..." } : u)
+        );
+
+        const res = await fetchWithAuth(`${API_BASE_URL}/api/items/youtube`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url, item_id: tempUploadId, notebook_id: activeNotebookId }),
+        });
+
+        if (res.ok) {
           const data = await res.json();
-
-          setAnalysisLogs((prev) => [...prev, "⚡ YouTube transcript chapters aligned!"]);
-          setAnalysisProgress(95);
-
           await fetchItems();
           setSelectedSourceIds((prev) => Array.from(new Set([...prev, data.id])));
-          toast.success("YouTube video ingested!");
-        } catch (e) {
-          toast.error("YouTube ingestion failed.");
-          setIsAnalyzing(false);
+          createdItem = data;
         }
-      } else {
-        const today = new Date();
-        const newItem: StudyItem = {
-          id: crypto.randomUUID(),
-          notebookId: activeNotebookId,
-          title: ytData.title,
-          createdAt: today.toISOString(),
-          kind: "youtube",
-          content: ytData.content,
-          youtubeUrl: url,
-          videoId: ytData.videoId,
-          chapters: ytData.chapters,
-          transcript: ytData.transcript,
-          flashcards: ytData.flashcards,
-          quiz: ytData.quiz,
-          notes: "",
-          chatHistory: [],
-        };
-        const allItems = localStorage.getItem("ultra_learn_items")
-          ? JSON.parse(localStorage.getItem("ultra_learn_items")!)
-          : [];
-        const updated = [newItem, ...allItems];
-        saveLocalItems(updated);
-        setSelectedSourceIds((prev) => [...prev, newItem.id]);
-        toast.success("Mock YouTube video ingested");
+      } catch (e) {
+        console.warn("Node gateway YouTube ingestion failed, trying direct FastAPI call...", e);
       }
-      setIsAnalyzing(false);
-      setActiveInputMode("none");
-      setInputText("");
-    });
+    }
+
+    // 2. Direct FastAPI fallback
+    if (!createdItem) {
+      try {
+        setUploadingSources((prev) =>
+          prev.map((u) => u.id === tempUploadId ? { ...u, progress: 75, status: "Extracting transcript via RAG..." } : u)
+        );
+
+        const fRes = await fetch(`${FASTAPI_BASE_URL}/process-youtube`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url, item_id: tempUploadId }),
+        });
+
+        if (fRes.ok) {
+          const fData = await fRes.json();
+          const newItem: StudyItem = {
+            id: tempUploadId,
+            notebookId: activeNotebookId,
+            title: fData.title || ytData.title,
+            createdAt: new Date().toISOString(),
+            kind: "youtube",
+            content: fData.content || ytData.content,
+            youtubeUrl: url,
+            videoId: fData.video_id || ytData.videoId,
+            chapters: fData.chapters || ytData.chapters,
+            transcript: fData.transcript || ytData.transcript,
+            flashcards: fData.flashcards || ytData.flashcards,
+            quiz: fData.quiz || ytData.quiz,
+            notes: "",
+            chatHistory: [],
+          };
+
+          const allItems = localStorage.getItem("ultra_learn_items")
+            ? JSON.parse(localStorage.getItem("ultra_learn_items")!)
+            : [];
+          saveLocalItems([newItem, ...allItems]);
+          setSelectedSourceIds((prev) => Array.from(new Set([...prev, newItem.id])));
+          setNotebooks((prev) => prev.map((n) => n.id === activeNotebookId ? { ...n } : n));
+          setSources((prev) => deduplicateSources([newItem, ...prev]));
+          createdItem = newItem;
+        }
+      } catch (fErr) {
+        console.warn("Direct FastAPI YouTube call failed:", fErr);
+      }
+    }
+
+    // 3. Fallback mock if both backends are down
+    if (!createdItem) {
+      const newItem: StudyItem = {
+        id: tempUploadId,
+        notebookId: activeNotebookId,
+        title: ytData.title,
+        createdAt: new Date().toISOString(),
+        kind: "youtube",
+        content: ytData.content,
+        youtubeUrl: url,
+        videoId: ytData.videoId,
+        chapters: ytData.chapters,
+        transcript: ytData.transcript,
+        flashcards: ytData.flashcards,
+        quiz: ytData.quiz,
+        notes: "",
+        chatHistory: [],
+      };
+      const allItems = localStorage.getItem("ultra_learn_items")
+        ? JSON.parse(localStorage.getItem("ultra_learn_items")!)
+        : [];
+      saveLocalItems([newItem, ...allItems]);
+      setSelectedSourceIds((prev) => Array.from(new Set([...prev, newItem.id])));
+      setSources((prev) => deduplicateSources([newItem, ...prev]));
+      createdItem = newItem;
+    }
+
+    // Remove from pending list
+    setUploadingSources((prev) => prev.filter((u) => u.id !== tempUploadId));
+
+    if (createdItem) {
+      toast.success(`Ingested YouTube video: ${createdItem.title}`);
+    } else {
+      toast.error("Failed to ingest YouTube video");
+    }
   };
 
   const onAddWebsite = () => {
@@ -2908,6 +2977,10 @@ function StudySessionPanel({
                   >
                     {src.kind === "pdf" ? (
                       <FileText className="h-4 w-4 text-red-400" />
+                    ) : src.kind === "presentation" || src.kind === "ppt" ? (
+                      <Presentation className="h-4 w-4 text-amber-500" />
+                    ) : src.kind === "doc" || src.kind === "docx" ? (
+                      <FileText className="h-4 w-4 text-blue-500" />
                     ) : src.kind === "youtube" ? (
                       <Youtube className="h-4 w-4 text-red-500" />
                     ) : src.kind === "website" ? (
@@ -3002,6 +3075,10 @@ function StudySessionPanel({
                             >
                               {src.kind === "pdf" ? (
                                 <FileText className="h-4 w-4 text-red-400" />
+                              ) : src.kind === "presentation" || src.kind === "ppt" ? (
+                                <Presentation className="h-4 w-4 text-amber-500" />
+                              ) : src.kind === "doc" || src.kind === "docx" ? (
+                                <FileText className="h-4 w-4 text-blue-500" />
                               ) : src.kind === "youtube" ? (
                                 <Youtube className="h-4 w-4 text-red-500" />
                               ) : src.kind === "website" ? (
@@ -3241,6 +3318,29 @@ function StudySessionPanel({
                     {previewSource.content}
                   </div>
                 )}
+
+                {(previewSource.kind === "presentation" || previewSource.kind === "ppt" || previewSource.kind === "doc" || previewSource.kind === "docx") && (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between pb-2 border-b border-border/40">
+                      <span className="text-[11px] font-mono text-muted-foreground uppercase flex items-center gap-1.5">
+                        {previewSource.kind === "presentation" || previewSource.kind === "ppt" ? (
+                          <>
+                            <Presentation className="h-3.5 w-3.5 text-amber-500" />
+                            <span>PowerPoint Slides Content</span>
+                          </>
+                        ) : (
+                          <>
+                            <FileText className="h-3.5 w-3.5 text-blue-500" />
+                            <span>Word Document Content</span>
+                          </>
+                        )}
+                      </span>
+                    </div>
+                    <div className="text-xs leading-relaxed text-foreground/90 whitespace-pre-wrap font-sans p-1 select-text">
+                      {previewSource.content}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           ) : (
@@ -3301,10 +3401,10 @@ function StudySessionPanel({
                     <label className="flex cursor-pointer flex-col items-center justify-center border border-dashed border-border/80 rounded-lg p-5 hover:border-primary/50 bg-background/50 hover:bg-secondary/40 transition-colors text-center">
                       <Paperclip className="h-5 w-5 text-muted-foreground mb-2" />
                       <span className="text-xs font-medium text-foreground">Select File</span>
-                      <span className="text-[10px] text-muted-foreground mt-0.5 font-mono">PDF, Word, TXT, MD up to 15MB</span>
+                      <span className="text-[10px] text-muted-foreground mt-0.5 font-mono">PDF, Word (.docx/.doc), PPT (.pptx/.ppt), TXT, MD</span>
                       <input
                         type="file"
-                        accept=".pdf,.docx,.txt,.md"
+                        accept=".pdf,.docx,.doc,.pptx,.ppt,.txt,.md"
                         className="hidden"
                         onChange={onFilesSelect}
                       />
@@ -3455,6 +3555,10 @@ function StudySessionPanel({
                             <span className="text-[10px] text-muted-foreground capitalize font-mono mt-0.5 flex items-center gap-1">
                               {src.kind === "pdf" ? (
                                 <FileText className="h-2.5 w-2.5 text-red-400" />
+                              ) : src.kind === "presentation" || src.kind === "ppt" ? (
+                                <Presentation className="h-2.5 w-2.5 text-amber-500" />
+                              ) : src.kind === "doc" || src.kind === "docx" ? (
+                                <FileText className="h-2.5 w-2.5 text-blue-500" />
                               ) : src.kind === "youtube" ? (
                                 <Youtube className="h-2.5 w-2.5 text-red-500" />
                               ) : src.kind === "website" ? (
@@ -3464,7 +3568,7 @@ function StudySessionPanel({
                               ) : (
                                 <Type className="h-2.5 w-2.5 text-purple-400" />
                               )}
-                              <span>{src.kind}</span>
+                              <span>{src.kind === "presentation" ? "presentation" : src.kind}</span>
                             </span>
                           </div>
                         </div>

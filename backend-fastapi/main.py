@@ -6,6 +6,7 @@ import hashlib
 import uuid
 import io
 import zipfile
+import html
 import asyncio
 import requests
 import numpy as np
@@ -835,28 +836,95 @@ def generate_study_materials(content_text: str, title: str):
     }
 
 # -------------------------------------------------------------
-# HELPER: Extract text from DOCX (Word Documents)
+# HELPERS: Extract text from DOCX, PPTX, and Legacy Binary Docs
 # -------------------------------------------------------------
 def extract_text_from_docx(file_bytes: bytes) -> str:
+    """Extracts formatted text from Word (.docx) files preserving paragraph structure."""
     try:
-        with zipfile.ZipFile(io.BytesIO(file_bytes)) as docx:
-            xml_content = docx.read('word/document.xml')
-            matches = re.findall(r'<w:t[^>]*>(.*?)</w:t>', xml_content.decode('utf-8'))
-            text = "".join(matches)
-            text = text.replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&")
-            return text
+        import docx
+        doc = docx.Document(io.BytesIO(file_bytes))
+        paras = [p.text.strip() for p in doc.paragraphs if p.text.strip()]
+        for table in doc.tables:
+            for row in table.rows:
+                row_text = " | ".join(c.text.strip() for c in row.cells if c.text.strip())
+                if row_text:
+                    paras.append(row_text)
+        if paras:
+            return "\n\n".join(paras)
+    except Exception:
+        pass
+
+    try:
+        with zipfile.ZipFile(io.BytesIO(file_bytes)) as docx_zip:
+            xml_content = docx_zip.read('word/document.xml').decode('utf-8', errors='ignore')
+            paragraphs = re.findall(r'<w:p[ >](.*?)</w:p>', xml_content)
+            out = []
+            for p in paragraphs:
+                texts = re.findall(r'<w:t[^>]*>(.*?)</w:t>', p)
+                if texts:
+                    p_text = "".join(texts).replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&")
+                    if p_text.strip():
+                        out.append(p_text.strip())
+            return "\n\n".join(out)
     except Exception as e:
         print(f"[ERROR] DOCX extraction failed: {e}")
         return ""
 
+
+def extract_text_from_pptx(file_bytes: bytes) -> tuple:
+    """
+    Extracts text from PowerPoint (.pptx) presentations slide-by-slide.
+    Returns (full_text, [(slide_num, slide_content), ...]).
+    """
+    slide_chunks = []
+    full_text_parts = []
+    try:
+        with zipfile.ZipFile(io.BytesIO(file_bytes)) as ppt_zip:
+            slide_files = [f for f in ppt_zip.namelist() if re.match(r'ppt/slides/slide\d+\.xml', f)]
+            def get_slide_num(fn):
+                m = re.search(r'slide(\d+)\.xml', fn)
+                return int(m.group(1)) if m else 9999
+            slide_files.sort(key=get_slide_num)
+
+            for idx, sfile in enumerate(slide_files, start=1):
+                try:
+                    xml_data = ppt_zip.read(sfile).decode('utf-8', errors='ignore')
+                    text_nodes = re.findall(r'<a:t[^>]*>(.*?)</a:t>', xml_data)
+                    clean_texts = [html.unescape(t.strip()) for t in text_nodes if t.strip()]
+                    if clean_texts:
+                        slide_body = "\n".join(clean_texts)
+                        slide_header = f"### Slide {idx}\n{slide_body}"
+                        slide_chunks.append((idx, slide_header))
+                        full_text_parts.append(slide_header)
+                except Exception:
+                    pass
+    except Exception as e:
+        print(f"[ERROR] PPTX extraction failed: {e}")
+
+    full_text = "\n\n".join(full_text_parts)
+    return full_text, slide_chunks
+
+
+def extract_text_from_binary_doc(file_bytes: bytes) -> str:
+    """Extracts printable text sequences from legacy binary formats (.doc, .ppt)."""
+    try:
+        raw_strings = re.findall(b'[\x20-\x7E\t\r\n]{4,}', file_bytes)
+        ascii_text = "\n".join(s.decode('latin-1', errors='ignore') for s in raw_strings)
+        lines = [line.strip() for line in ascii_text.splitlines() if len(line.strip()) > 3]
+        return "\n".join(lines[:600])
+    except Exception as e:
+        print(f"[ERROR] Binary document extraction failed: {e}")
+        return ""
+
 # -------------------------------------------------------------
-# API ENDPOINT: PROCESS PDF / DOCX / TXT & STORE RAG CHUNKS
+# API ENDPOINT: PROCESS MULTI-FORMAT DOCUMENTS & STORE RAG CHUNKS
+# (Supports PDF, DOCX, DOC, PPTX, PPT, TXT, MD)
 # -------------------------------------------------------------
 @app.post("/process-pdf")
 @traceable(
     run_type="chain",
-    name="LearnX Ultra-Fast PDF Ingestion & Gemini Processing",
-    tags=["ingestion", "pdf", "gemini-files-api", "performance-benchmark"]
+    name="LearnX Ultra-Fast Document Ingestion & Gemini Processing",
+    tags=["ingestion", "documents", "gemini-files-api", "performance-benchmark"]
 )
 async def process_pdf(file: UploadFile = File(...), item_id: str = Form(...), profile_id: Optional[str] = Form(None)):
     validate_uuid_string(item_id)
@@ -871,11 +939,36 @@ async def process_pdf(file: UploadFile = File(...), item_id: str = Form(...), pr
         gemini_file_uri = None
         gemini_upload_duration_ms = 0.0
 
+        # Classify document kind
+        if filename_lower.endswith(".pptx") or filename_lower.endswith(".ppt"):
+            doc_kind = "presentation"
+        elif filename_lower.endswith(".docx") or filename_lower.endswith(".doc"):
+            doc_kind = "doc"
+        elif filename_lower.endswith(".txt") or filename_lower.endswith(".md"):
+            doc_kind = "text"
+        else:
+            doc_kind = "pdf"
+
         # Step 1: Upload to Google Gemini Files API (High-speed native document processing in 2-4s)
-        if filename_lower.endswith(".pdf") and GEMINI_API_KEY:
+        mime_map = {
+            ".pdf": "application/pdf",
+            ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            ".doc": "application/msword",
+            ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            ".ppt": "application/vnd.ms-powerpoint",
+            ".txt": "text/plain",
+            ".md": "text/markdown",
+        }
+        detected_mime = None
+        for ext, m in mime_map.items():
+            if filename_lower.endswith(ext):
+                detected_mime = m
+                break
+
+        if detected_mime and GEMINI_API_KEY:
             t_gemini_start = time.time()
             try:
-                gemini_info = upload_to_gemini_files_api(file_bytes, file.filename, mime_type="application/pdf")
+                gemini_info = upload_to_gemini_files_api(file_bytes, file.filename, mime_type=detected_mime)
                 gemini_file_uri = gemini_info.get("uri")
                 gemini_upload_duration_ms = round((time.time() - t_gemini_start) * 1000, 2)
             except Exception as ge:
@@ -885,9 +978,34 @@ async def process_pdf(file: UploadFile = File(...), item_id: str = Form(...), pr
         t_extract_start = time.time()
         num_pages = 1
         try:
-            if filename_lower.endswith(".docx"):
+            if filename_lower.endswith(".pptx"):
+                print(f"[INFO] Ingesting PowerPoint Presentation (.pptx): {file.filename}")
+                full_text, slide_chunks = extract_text_from_pptx(file_bytes)
+                num_pages = len(slide_chunks) or 1
+                for s_num, s_text in slide_chunks:
+                    page_chunks.append((item_id, s_num, s_text))
+
+            elif filename_lower.endswith(".ppt"):
+                print(f"[INFO] Ingesting Legacy PowerPoint (.ppt): {file.filename}")
+                full_text = extract_text_from_binary_doc(file_bytes)
+                if full_text.strip():
+                    for chunk in chunk_text(full_text):
+                        if chunk.strip():
+                            page_chunks.append((item_id, 1, chunk))
+
+            elif filename_lower.endswith(".docx"):
                 print(f"[INFO] Ingesting Word Document (.docx): {file.filename}")
                 full_text = extract_text_from_docx(file_bytes)
+                num_pages = max(1, len(full_text) // 2000)
+                if full_text.strip():
+                    for chunk in chunk_text(full_text):
+                        if chunk.strip():
+                            page_chunks.append((item_id, 1, chunk))
+
+            elif filename_lower.endswith(".doc"):
+                print(f"[INFO] Ingesting Legacy Word Document (.doc): {file.filename}")
+                full_text = extract_text_from_binary_doc(file_bytes)
+                num_pages = max(1, len(full_text) // 2000)
                 if full_text.strip():
                     for chunk in chunk_text(full_text):
                         if chunk.strip():
@@ -935,7 +1053,7 @@ async def process_pdf(file: UploadFile = File(...), item_id: str = Form(...), pr
         if not full_text.strip():
             full_text = (
                 f"Study workspace for '{file.filename}'.\n\n"
-                f"Document contains {num_pages} pages. Gemini native multimodal long-context processing is active."
+                f"Document contains {num_pages} sections/slides. Gemini native multimodal long-context processing is active."
             )
             page_chunks.append((item_id, 1, full_text))
 
@@ -952,7 +1070,7 @@ async def process_pdf(file: UploadFile = File(...), item_id: str = Form(...), pr
                 title=clean_title,
                 file_name=effective_file_ref,
                 content=full_text,
-                kind="pdf",
+                kind=doc_kind,
                 profile_id=profile_id
             )
         vector_duration_ms = round((time.time() - t_vector_start) * 1000, 2)
