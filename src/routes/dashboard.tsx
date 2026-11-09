@@ -64,6 +64,7 @@ import {
   ArrowUp,
   Globe,
   Pin,
+  Copy,
   GraduationCap,
   Lightbulb,
   Eye,
@@ -3375,40 +3376,48 @@ function StudySessionPanel({
 
               {/* Message Feed */}
               <div className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-thin">
-                {(notebook.chatHistory || []).map((msg, idx) => (
-                  <div
-                    key={idx}
-                    className={`flex gap-3 text-xs leading-relaxed ${
-                      msg.role === "user" ? "justify-end" : "justify-start"
-                    }`}
-                  >
-                    {msg.role === "assistant" && (
-                      <div className="h-6 w-6 rounded-md bg-primary/10 border border-primary/20 flex items-center justify-center font-bold text-[10px] text-primary shrink-0 select-none font-mono">
+                {(notebook.chatHistory || []).map((msg, idx) => {
+                  if (msg.role === "user") {
+                    return (
+                      <div key={idx} className="flex justify-end">
+                        <div className="rounded-2xl border border-border/60 bg-secondary/80 px-4 py-2.5 max-w-[80%] text-left text-foreground shadow-xs">
+                          <p className="leading-relaxed text-xs text-foreground whitespace-pre-wrap">{msg.content}</p>
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div key={idx} className="flex gap-3 text-xs leading-relaxed justify-start group/bubble">
+                      <div className="h-6 w-6 rounded-md bg-primary/10 border border-primary/20 flex items-center justify-center font-bold text-[10px] text-primary shrink-0 select-none font-mono mt-0.5">
                         AI
                       </div>
-                    )}
-                    
-                    <div
-                      className={`rounded-lg border p-3.5 max-w-[85%] text-left relative group/bubble ${
-                        msg.role === "user"
-                          ? "bg-secondary/70 border-border/60 text-foreground"
-                          : "bg-card border-border/60 text-card-foreground shadow-xs"
-                      }`}
-                    >
-                      {msg.role === "assistant" && (
-                        <button
-                          onClick={() => pinMessage(msg.content)}
-                          className="absolute top-2 right-2 bg-background border border-border/70 p-1.5 rounded-md text-muted-foreground hover:text-primary hover:bg-secondary opacity-0 group-hover/bubble:opacity-100 transition-opacity z-10"
-                          title="Pin response to Noteboard"
-                        >
-                          <Pin className="h-3 w-3" />
-                        </button>
-                      )}
+                      
+                      <div className="flex-1 min-w-0 text-left relative pr-10">
+                        {/* Hover action toolbar */}
+                        <div className="absolute top-0 right-0 flex items-center gap-1 opacity-0 group-hover/bubble:opacity-100 transition-opacity z-10">
+                          <button
+                            onClick={() => {
+                              navigator.clipboard.writeText(msg.content);
+                              toast.success("Copied to clipboard");
+                            }}
+                            className="bg-card/90 hover:bg-card border border-border/70 p-1.5 rounded-md text-muted-foreground hover:text-foreground transition-colors shadow-xs"
+                            title="Copy response"
+                          >
+                            <Copy className="h-3 w-3" />
+                          </button>
+                          <button
+                            onClick={() => pinMessage(msg.content)}
+                            className="bg-card/90 hover:bg-card border border-border/70 p-1.5 rounded-md text-muted-foreground hover:text-primary transition-colors shadow-xs"
+                            title="Pin response to Noteboard"
+                          >
+                            <Pin className="h-3 w-3" />
+                          </button>
+                        </div>
 
-                      {msg.role === "assistant" ? (
-                        <div className="space-y-2">
+                        {/* Text rendered directly on workspace display surface */}
+                        <div className="space-y-2 text-foreground/90">
                           {msg.content.split("\n").map((line, lidx) => {
-                            
                             // Render **bold text**
                             const renderBold = (str: string) => {
                               return str.split(/(\*\*.*?\*\*)/g).map((p, j) => {
@@ -3478,21 +3487,19 @@ function StudySessionPanel({
                             );
                           })}
                         </div>
-                      ) : (
-                        <p className="leading-relaxed text-xs text-foreground">{msg.content}</p>
-                      )}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
 
-                {/* Active Real-Time Streaming Message Bubble */}
+                {/* Active Real-Time Streaming Message */}
                 {streamingMessage !== null && streamingMessage.length > 0 && (
                   <div className="flex gap-3 text-xs leading-relaxed justify-start">
-                    <div className="h-6 w-6 rounded-md bg-primary/10 border border-primary/20 flex items-center justify-center font-bold text-[10px] text-primary shrink-0 select-none font-mono">
+                    <div className="h-6 w-6 rounded-md bg-primary/10 border border-primary/20 flex items-center justify-center font-bold text-[10px] text-primary shrink-0 select-none font-mono mt-0.5">
                       AI
                     </div>
-                    <div className="rounded-lg border border-border/60 bg-card p-3.5 max-w-[85%] text-left relative text-card-foreground shadow-xs">
-                      <div className="space-y-2">
+                    <div className="flex-1 min-w-0 text-left">
+                      <div className="space-y-2 text-foreground/90">
                         {streamingMessage.split("\n").map((line, lidx, arr) => {
                           const isLastLine = lidx === arr.length - 1;
                           const cleanLine = line;
@@ -3577,16 +3584,17 @@ function StudySessionPanel({
                 )}
 
                 {(isBotTyping || (streamingMessage !== null && streamingMessage.length === 0)) && (
-                  <div className="flex gap-3 text-xs justify-start items-center">
+                  <div className="flex gap-3 text-xs justify-start items-center py-1">
                     <div className="h-6 w-6 rounded-md bg-primary/10 border border-primary/20 flex items-center justify-center font-bold text-[10px] text-primary shrink-0 select-none animate-pulse font-mono">
                       AI
                     </div>
-                    <div className="rounded-lg border border-border/60 bg-card px-3.5 py-2 text-muted-foreground">
-                      <span className="flex gap-1">
-                        <span className="animate-bounce font-bold">.</span>
-                        <span className="animate-bounce delay-100 font-bold">.</span>
-                        <span className="animate-bounce delay-200 font-bold">.</span>
+                    <div className="flex items-center gap-1.5 text-muted-foreground px-1">
+                      <span className="flex gap-1 items-center">
+                        <span className="h-1.5 w-1.5 rounded-full bg-primary/60 animate-bounce" />
+                        <span className="h-1.5 w-1.5 rounded-full bg-primary/60 animate-bounce [animation-delay:150ms]" />
+                        <span className="h-1.5 w-1.5 rounded-full bg-primary/60 animate-bounce [animation-delay:300ms]" />
                       </span>
+                      <span className="text-[11px] text-muted-foreground ml-1">Thinking...</span>
                     </div>
                   </div>
                 )}
